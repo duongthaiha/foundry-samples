@@ -524,6 +524,9 @@ resource applicationInsights 'Microsoft.Insights/components@2020-02-02' = {
 resource apiManagement 'Microsoft.ApiManagement/service@2023-05-01-preview' = {
   name: apimServiceName
   location: location
+  identity: {
+    type: 'SystemAssigned'
+  }
   sku: {
     name: 'Developer'
     capacity: 1
