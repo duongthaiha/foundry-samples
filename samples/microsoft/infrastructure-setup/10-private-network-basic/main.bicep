@@ -23,6 +23,12 @@ param peSubnetName string = 'pe-subnet'
 @description('Name of the jumpbox subnet')
 param jumpboxSubnetName string = 'jumpbox-subnet'
 
+@description('Name of the API Management subnet')
+param apimSubnetName string = 'apim-subnet'
+
+@description('Name of the API Management service')
+param apimServiceName string = '${aiFoundryName}-apim'
+
 @description('Admin username for the jumpbox VM')
 param adminUsername string = 'azureuser'
 
@@ -104,6 +110,239 @@ resource jumpboxSubnet 'Microsoft.Network/virtualNetworks/subnets@2024-05-01' = 
   ]
 }
 
+resource apimNetworkSecurityGroup 'Microsoft.Network/networkSecurityGroups@2024-05-01' = {
+  name: '${apimSubnetName}-nsg'
+  location: location
+  properties: {
+    securityRules: [
+      // INBOUND RULES
+      {
+        name: 'Management_endpoint_for_Azure_portal_and_Powershell'
+        properties: {
+          protocol: 'Tcp'
+          sourcePortRange: '*'
+          destinationPortRange: '3443'
+          sourceAddressPrefix: 'ApiManagement'
+          destinationAddressPrefix: 'VirtualNetwork'
+          access: 'Allow'
+          priority: 100
+          direction: 'Inbound'
+        }
+      }
+      {
+        name: 'Azure_Infrastructure_Load_Balancer'
+        properties: {
+          protocol: 'Tcp'
+          sourcePortRange: '*'
+          destinationPortRange: '6390'
+          sourceAddressPrefix: 'AzureLoadBalancer'
+          destinationAddressPrefix: 'VirtualNetwork'
+          access: 'Allow'
+          priority: 110
+          direction: 'Inbound'
+        }
+      }
+      {
+        name: 'Azure_Cache_for_Redis_Internal'
+        properties: {
+          protocol: 'Tcp'
+          sourcePortRange: '*'
+          destinationPortRange: '6380'
+          sourceAddressPrefix: 'VirtualNetwork'
+          destinationAddressPrefix: 'VirtualNetwork'
+          access: 'Allow'
+          priority: 120
+          direction: 'Inbound'
+        }
+      }
+      {
+        name: 'Dependency_on_Redis_Cache'
+        properties: {
+          protocol: 'Tcp'
+          sourcePortRange: '*'
+          destinationPortRange: '6381-6383'
+          sourceAddressPrefix: 'VirtualNetwork'
+          destinationAddressPrefix: 'VirtualNetwork'
+          access: 'Allow'
+          priority: 130
+          direction: 'Inbound'
+        }
+      }
+      {
+        name: 'Dependency_to_sync_Rate_Limit_Inbound'
+        properties: {
+          protocol: 'Udp'
+          sourcePortRange: '*'
+          destinationPortRange: '4290'
+          sourceAddressPrefix: 'VirtualNetwork'
+          destinationAddressPrefix: 'VirtualNetwork'
+          access: 'Allow'
+          priority: 140
+          direction: 'Inbound'
+        }
+      }
+      // OUTBOUND RULES
+      {
+        name: 'Certificate_validation_HTTP'
+        properties: {
+          protocol: 'Tcp'
+          sourcePortRange: '*'
+          destinationPortRange: '80'
+          sourceAddressPrefix: 'VirtualNetwork'
+          destinationAddressPrefix: 'Internet'
+          access: 'Allow'
+          priority: 100
+          direction: 'Outbound'
+        }
+      }
+      {
+        name: 'Certificate_validation_HTTPS'
+        properties: {
+          protocol: 'Tcp'
+          sourcePortRange: '*'
+          destinationPortRange: '443'
+          sourceAddressPrefix: 'VirtualNetwork'
+          destinationAddressPrefix: 'Internet'
+          access: 'Allow'
+          priority: 110
+          direction: 'Outbound'
+        }
+      }
+      {
+        name: 'Dependency_on_Azure_Storage'
+        properties: {
+          protocol: 'Tcp'
+          sourcePortRange: '*'
+          destinationPortRange: '443'
+          sourceAddressPrefix: 'VirtualNetwork'
+          destinationAddressPrefix: 'Storage'
+          access: 'Allow'
+          priority: 120
+          direction: 'Outbound'
+        }
+      }
+      {
+        name: 'Dependency_on_Azure_SQL'
+        properties: {
+          protocol: 'Tcp'
+          sourcePortRange: '*'
+          destinationPortRange: '1433'
+          sourceAddressPrefix: 'VirtualNetwork'
+          destinationAddressPrefix: 'Sql'
+          access: 'Allow'
+          priority: 130
+          direction: 'Outbound'
+        }
+      }
+      {
+        name: 'Dependency_on_Azure_Key_Vault'
+        properties: {
+          protocol: 'Tcp'
+          sourcePortRange: '*'
+          destinationPortRange: '443'
+          sourceAddressPrefix: 'VirtualNetwork'
+          destinationAddressPrefix: 'AzureKeyVault'
+          access: 'Allow'
+          priority: 140
+          direction: 'Outbound'
+        }
+      }
+      {
+        name: 'Dependency_for_Log_to_Event_Hub_policy'
+        properties: {
+          protocol: 'Tcp'
+          sourcePortRange: '*'
+          destinationPortRanges: ['5671', '5672', '443']
+          sourceAddressPrefix: 'VirtualNetwork'
+          destinationAddressPrefix: 'EventHub'
+          access: 'Allow'
+          priority: 150
+          direction: 'Outbound'
+        }
+      }
+      {
+        name: 'Dependency_on_Azure_Monitor'
+        properties: {
+          protocol: 'Tcp'
+          sourcePortRange: '*'
+          destinationPortRanges: ['1886', '443']
+          sourceAddressPrefix: 'VirtualNetwork'
+          destinationAddressPrefix: 'AzureMonitor'
+          access: 'Allow'
+          priority: 160
+          direction: 'Outbound'
+        }
+      }
+      {
+        name: 'Dependency_on_Azure_Active_Directory'
+        properties: {
+          protocol: 'Tcp'
+          sourcePortRange: '*'
+          destinationPortRange: '443'
+          sourceAddressPrefix: 'VirtualNetwork'
+          destinationAddressPrefix: 'AzureActiveDirectory'
+          access: 'Allow'
+          priority: 170
+          direction: 'Outbound'
+        }
+      }
+      {
+        name: 'Dependency_on_Azure_File_Share_for_GIT'
+        properties: {
+          protocol: 'Tcp'
+          sourcePortRange: '*'
+          destinationPortRange: '445'
+          sourceAddressPrefix: 'VirtualNetwork'
+          destinationAddressPrefix: 'Storage'
+          access: 'Allow'
+          priority: 180
+          direction: 'Outbound'
+        }
+      }
+      {
+        name: 'Dependency_on_Redis_Cache_outbound'
+        properties: {
+          protocol: 'Tcp'
+          sourcePortRange: '*'
+          destinationPortRanges: ['6380', '6381', '6382', '6383']
+          sourceAddressPrefix: 'VirtualNetwork'
+          destinationAddressPrefix: 'VirtualNetwork'
+          access: 'Allow'
+          priority: 190
+          direction: 'Outbound'
+        }
+      }
+      {
+        name: 'Dependency_To_sync_RateLimit_Outbound'
+        properties: {
+          protocol: 'Udp'
+          sourcePortRange: '*'
+          destinationPortRange: '4290'
+          sourceAddressPrefix: 'VirtualNetwork'
+          destinationAddressPrefix: 'VirtualNetwork'
+          access: 'Allow'
+          priority: 200
+          direction: 'Outbound'
+        }
+      }
+    ]
+  }
+}
+
+resource apimSubnet 'Microsoft.Network/virtualNetworks/subnets@2024-05-01' = {
+  parent: virtualNetwork
+  name: apimSubnetName
+  properties: {
+    addressPrefix: '192.168.3.0/27'
+    networkSecurityGroup: {
+      id: apimNetworkSecurityGroup.id
+    }
+  }
+  dependsOn: [
+    jumpboxSubnet
+  ]
+}
+
 /* 
 Step 3: Create a private endpoint to access your private resource
 */
@@ -150,6 +389,11 @@ resource cognitiveServicesPrivateDnsZone 'Microsoft.Network/privateDnsZones@2020
   location: 'global'
 }
 
+resource apimPrivateDnsZone 'Microsoft.Network/privateDnsZones@2020-06-01' = {
+  name: 'privatelink.azure-api.net'
+  location: 'global'
+}
+
 // 2) Link AI Services and Azure OpenAI and Cognitive Services DNS Zone to VNet
 resource aiServicesLink 'Microsoft.Network/privateDnsZones/virtualNetworkLinks@2024-06-01' = {
   parent: aiServicesPrivateDnsZone
@@ -179,6 +423,18 @@ resource cognitiveServicesLink 'Microsoft.Network/privateDnsZones/virtualNetwork
   parent: cognitiveServicesPrivateDnsZone
   location: 'global'
   name: 'aiServicesCognitiveServices-link'
+  properties: {
+    virtualNetwork: {
+      id: virtualNetwork.id                      // Link to specified VNet
+    }
+    registrationEnabled: false           // Don't auto-register VNet resources
+  }
+}
+
+resource apimPrivateDnsLink 'Microsoft.Network/privateDnsZones/virtualNetworkLinks@2024-06-01' = {
+  parent: apimPrivateDnsZone
+  location: 'global'
+  name: 'apim-link'
   properties: {
     virtualNetwork: {
       id: virtualNetwork.id                      // Link to specified VNet
@@ -235,6 +491,60 @@ module jumpboxModule 'jumpbox.bicep' = {
   }
 }
 
+/*
+  Step 5.6: Deploy Azure API Management with VNET integration
+*/
+resource apiManagement 'Microsoft.ApiManagement/service@2023-05-01-preview' = {
+  name: apimServiceName
+  location: location
+  sku: {
+    name: 'Developer'
+    capacity: 1
+  }
+  properties: {
+    publisherEmail: 'haduong@microsoft.com'
+    publisherName: 'Microsoft'
+    virtualNetworkType: 'Internal'
+    virtualNetworkConfiguration: {
+      subnetResourceId: apimSubnet.id
+    }
+  }
+}
+
+/*
+  Step 5.7: API Management DNS Configuration
+  Note: API Management is configured with Internal VNet integration, so no private endpoint is needed.
+  However, we need to create a DNS A record to map the APIM FQDN to its private IP address.
+*/
+
+// Create DNS A record for API Management in the private DNS zone
+resource apimDnsRecord 'Microsoft.Network/privateDnsZones/A@2020-06-01' = {
+  parent: apimPrivateDnsZone
+  name: apimServiceName
+  properties: {
+    ttl: 300
+    aRecords: [
+      {
+        ipv4Address: apiManagement.properties.privateIPAddresses[0]
+      }
+    ]
+  }
+}
+
+// Create wildcard DNS A record for API Management developer portal and other subdomains
+resource apimWildcardDnsRecord 'Microsoft.Network/privateDnsZones/A@2020-06-01' = {
+  parent: apimPrivateDnsZone
+  name: '*'
+  properties: {
+    ttl: 300
+    aRecords: [
+      {
+        ipv4Address: apiManagement.properties.privateIPAddresses[0]
+      }
+    ]
+  }
+}
+
 
 /*
   Step 6: Deploy gpt-4o model
@@ -274,3 +584,7 @@ output project string = project.name
 output jumpboxVmName string = jumpboxModule.outputs.jumpboxVmName
 output bastionHostName string = jumpboxModule.outputs.bastionHostName
 output jumpboxPrivateIp string = jumpboxModule.outputs.jumpboxPrivateIp
+output apimServiceName string = apiManagement.name
+output apimGatewayUrl string = apiManagement.properties.gatewayUrl
+output apimManagementApiUrl string = apiManagement.properties.managementApiUrl
+output apimPrivateIp string = apiManagement.properties.privateIPAddresses[0]
