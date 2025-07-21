@@ -20,6 +20,16 @@ param vnetName string = 'private-vnet'
 @description('Name of the private endpoint subnet')
 param peSubnetName string = 'pe-subnet'
 
+@description('Name of the jumpbox subnet')
+param jumpboxSubnetName string = 'jumpbox-subnet'
+
+@description('Admin username for the jumpbox VM')
+param adminUsername string = 'azureuser'
+
+@description('Admin password for the jumpbox VM')
+@secure()
+param adminPassword string
+
 /*
   Step 1: Create an Account 
 */ 
@@ -61,14 +71,6 @@ resource virtualNetwork 'Microsoft.Network/virtualNetworks@2024-05-01' = {
         '192.168.0.0/16'
       ]
     }
-    subnets: [
-      {
-        name: peSubnetName
-        properties: {
-          addressPrefix: '192.168.0.0/24'
-        }
-      }
-    ]
   }
 }
 
@@ -78,6 +80,28 @@ resource subnet 'Microsoft.Network/virtualNetworks/subnets@2024-05-01' = {
   properties: {
     addressPrefix: '192.168.0.0/24'
   }
+}
+
+resource bastionSubnet 'Microsoft.Network/virtualNetworks/subnets@2024-05-01' = {
+  parent: virtualNetwork
+  name: 'AzureBastionSubnet'
+  properties: {
+    addressPrefix: '192.168.1.0/26'
+  }
+  dependsOn: [
+    subnet
+  ]
+}
+
+resource jumpboxSubnet 'Microsoft.Network/virtualNetworks/subnets@2024-05-01' = {
+  parent: virtualNetwork
+  name: jumpboxSubnetName
+  properties: {
+    addressPrefix: '192.168.2.0/28'
+  }
+  dependsOn: [
+    bastionSubnet
+  ]
 }
 
 /* 
@@ -196,6 +220,21 @@ resource aiServicesDnsGroup 'Microsoft.Network/privateEndpoints/privateDnsZoneGr
   ]
 }
 
+/*
+  Step 5.5: Deploy Jumpbox VM Module
+*/
+module jumpboxModule 'jumpbox.bicep' = {
+  name: 'jumpbox-deployment'
+  params: {
+    namePrefix: aiFoundryName
+    location: location
+    adminUsername: adminUsername
+    adminPassword: adminPassword
+    jumpboxSubnetId: jumpboxSubnet.id
+    bastionSubnetId: bastionSubnet.id
+  }
+}
+
 
 /*
   Step 6: Deploy gpt-4o model
@@ -232,3 +271,6 @@ resource project 'Microsoft.CognitiveServices/accounts/projects@2025-04-01-previ
 output accountId string = account.id
 output accountName string = account.name
 output project string = project.name
+output jumpboxVmName string = jumpboxModule.outputs.jumpboxVmName
+output bastionHostName string = jumpboxModule.outputs.bastionHostName
+output jumpboxPrivateIp string = jumpboxModule.outputs.jumpboxPrivateIp

@@ -1,0 +1,3 @@
+uniqueName="foundry-private-2860"
+vmpassword="duongthaiha@1984"
+az deployment group create --name "deployment-$(date +%Y%m%d%H%M%S)" --resource-group rg-private-foundry --template-file main.bicep --parameters location=uksouth aiFoundryName=$uniqueName adminPassword=$vmpassword
