@@ -492,6 +492,33 @@ module jumpboxModule 'jumpbox.bicep' = {
 }
 
 /*
+  Step 5.5: Create Log Analytics Workspace and Application Insights
+*/
+resource logAnalyticsWorkspace 'Microsoft.OperationalInsights/workspaces@2023-09-01' = {
+  name: '${aiFoundryName}-logs'
+  location: location
+  properties: {
+    sku: {
+      name: 'PerGB2018'
+    }
+    retentionInDays: 30
+    features: {
+      enableLogAccessUsingOnlyResourcePermissions: true
+    }
+  }
+}
+
+resource applicationInsights 'Microsoft.Insights/components@2020-02-02' = {
+  name: '${aiFoundryName}-appinsights'
+  location: location
+  kind: 'web'
+  properties: {
+    Application_Type: 'web'
+    WorkspaceResourceId: logAnalyticsWorkspace.id
+  }
+}
+
+/*
   Step 5.6: Deploy Azure API Management with VNET integration
 */
 resource apiManagement 'Microsoft.ApiManagement/service@2023-05-01-preview' = {
@@ -588,3 +615,8 @@ output apimServiceName string = apiManagement.name
 output apimGatewayUrl string = apiManagement.properties.gatewayUrl
 output apimManagementApiUrl string = apiManagement.properties.managementApiUrl
 output apimPrivateIp string = apiManagement.properties.privateIPAddresses[0]
+output logAnalyticsWorkspaceId string = logAnalyticsWorkspace.id
+output logAnalyticsWorkspaceName string = logAnalyticsWorkspace.name
+output applicationInsightsId string = applicationInsights.id
+output applicationInsightsName string = applicationInsights.name
+output applicationInsightsInstrumentationKey string = applicationInsights.properties.InstrumentationKey
