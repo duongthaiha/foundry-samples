@@ -390,7 +390,7 @@ resource cognitiveServicesPrivateDnsZone 'Microsoft.Network/privateDnsZones@2020
 }
 
 resource apimPrivateDnsZone 'Microsoft.Network/privateDnsZones@2020-06-01' = {
-  name: 'privatelink.azure-api.net'
+  name: 'azure-api.net'
   location: 'global'
 }
 
@@ -544,10 +544,11 @@ resource apiManagement 'Microsoft.ApiManagement/service@2023-05-01-preview' = {
 /*
   Step 5.7: API Management DNS Configuration
   Note: API Management is configured with Internal VNet integration, so no private endpoint is needed.
-  However, we need to create a DNS A record to map the APIM FQDN to its private IP address.
+  However, we need to create DNS A records in the azure-api.net zone to map the APIM FQDNs to its private IP address.
+  For Internal VNet mode, we use the actual domain (azure-api.net) not the privatelink subdomain.
 */
 
-// Create DNS A record for API Management in the private DNS zone
+// Create DNS A record for API Management gateway in the private DNS zone
 resource apimDnsRecord 'Microsoft.Network/privateDnsZones/A@2020-06-01' = {
   parent: apimPrivateDnsZone
   name: apimServiceName
@@ -561,7 +562,63 @@ resource apimDnsRecord 'Microsoft.Network/privateDnsZones/A@2020-06-01' = {
   }
 }
 
-// Create wildcard DNS A record for API Management developer portal and other subdomains
+// Create DNS A record for API Management developer portal
+resource apimDeveloperPortalDnsRecord 'Microsoft.Network/privateDnsZones/A@2020-06-01' = {
+  parent: apimPrivateDnsZone
+  name: '${apimServiceName}.developer'
+  properties: {
+    ttl: 300
+    aRecords: [
+      {
+        ipv4Address: apiManagement.properties.privateIPAddresses[0]
+      }
+    ]
+  }
+}
+
+// Create DNS A record for API Management legacy portal
+resource apimPortalDnsRecord 'Microsoft.Network/privateDnsZones/A@2020-06-01' = {
+  parent: apimPrivateDnsZone
+  name: '${apimServiceName}.portal'
+  properties: {
+    ttl: 300
+    aRecords: [
+      {
+        ipv4Address: apiManagement.properties.privateIPAddresses[0]
+      }
+    ]
+  }
+}
+
+// Create DNS A record for API Management management endpoint
+resource apimManagementDnsRecord 'Microsoft.Network/privateDnsZones/A@2020-06-01' = {
+  parent: apimPrivateDnsZone
+  name: '${apimServiceName}.management'
+  properties: {
+    ttl: 300
+    aRecords: [
+      {
+        ipv4Address: apiManagement.properties.privateIPAddresses[0]
+      }
+    ]
+  }
+}
+
+// Create DNS A record for API Management SCM endpoint
+resource apimScmDnsRecord 'Microsoft.Network/privateDnsZones/A@2020-06-01' = {
+  parent: apimPrivateDnsZone
+  name: '${apimServiceName}.scm'
+  properties: {
+    ttl: 300
+    aRecords: [
+      {
+        ipv4Address: apiManagement.properties.privateIPAddresses[0]
+      }
+    ]
+  }
+}
+
+// Create wildcard DNS A record for any other API Management subdomains
 resource apimWildcardDnsRecord 'Microsoft.Network/privateDnsZones/A@2020-06-01' = {
   parent: apimPrivateDnsZone
   name: '*'

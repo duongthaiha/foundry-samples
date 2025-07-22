@@ -120,6 +120,26 @@ resource jumpboxVm 'Microsoft.Compute/virtualMachines@2024-07-01' = {
   }
 }
 
+/*
+  Auto-shutdown schedule for the jumpbox VM
+*/
+resource jumpboxAutoShutdown 'Microsoft.DevTestLab/schedules@2018-09-15' = {
+  name: 'shutdown-computevm-${jumpboxVm.name}'
+  location: location
+  properties: {
+    status: 'Enabled'
+    taskType: 'ComputeVmShutdownTask'
+    dailyRecurrence: {
+      time: '0100'
+    }
+    timeZoneId: 'UTC'
+    targetResourceId: jumpboxVm.id
+    notificationSettings: {
+      status: 'Disabled'
+    }
+  }
+}
+
 // Outputs
 output jumpboxVmName string = jumpboxVm.name
 output jumpboxVmId string = jumpboxVm.id
