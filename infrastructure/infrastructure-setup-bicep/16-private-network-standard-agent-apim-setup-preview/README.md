@@ -188,6 +188,101 @@ Click the deploy to Azure button above to open the Azure portal and deploy the t
 
 ---
 
+## Deploy APIM with VNet Injection (Optional)
+
+If you need to create a new Azure API Management (APIM) instance with VNet injection and integrate it with your agent environment, use the `deploy-apim.bicep` template provided in this folder. This template creates:
+
+- A **separate VNet** (`10.0.0.0/16` by default) for APIM
+- An **NSG** with required APIM management rules
+- An **APIM Developer SKU** instance with **internal VNet injection**
+- **Bidirectional VNet peering** between the APIM VNet and the Agent VNet
+
+### APIM Template Parameters
+
+| Parameter | Description | Default |
+|-----------|-------------|---------|
+| `location` | Azure region for all resources | Resource group location |
+| `apimName` | Name prefix for the APIM instance | `apim-agent` |
+| `publisherEmail` | Publisher email (required by APIM) | `admin@contoso.com` |
+| `publisherName` | Publisher organization name | `Contoso` |
+| `apimVnetName` | Name of the APIM VNet | `apim-vnet` |
+| `apimVnetAddressPrefix` | Address space for the APIM VNet | `10.0.0.0/16` |
+| `apimSubnetName` | Name of the APIM subnet | `apim-subnet` |
+| `apimSubnetAddressPrefix` | Address prefix for the APIM subnet | `10.0.0.0/24` |
+| `agentVnetResourceGroup` | Resource group of the existing Agent VNet | Same as deployment RG |
+| `agentVnetName` | Name of the existing Agent VNet to peer with | `agent-vnet-test` |
+
+### APIM Deployment Steps
+
+> **Note:** The Agent environment (main.bicep) must be deployed first before deploying APIM, as the APIM template peers with the existing Agent VNet.
+
+> **Note:** APIM Developer SKU with VNet injection typically takes **30-45 minutes** to provision.
+
+**Step 1: Deploy the APIM template**
+
+```bash
+az deployment group create \
+  --resource-group <your-resource-group> \
+  --template-file deploy-apim.bicep \
+  --parameters location=<your-region> \
+               agentVnetResourceGroup=<agent-vnet-resource-group> \
+               agentVnetName=<agent-vnet-name> \
+               publisherEmail=<your-email> \
+               publisherName=<your-org-name>
+```
+
+**Step 2: Retrieve the APIM Resource ID**
+
+After the APIM deployment completes, retrieve the APIM resource ID from the deployment outputs:
+
+```bash
+az deployment group show \
+  --resource-group <your-resource-group> \
+  --name deploy-apim \
+  --query "properties.outputs.apimResourceId.value" -o tsv
+```
+
+**Step 3: Redeploy the main template with the APIM Resource ID**
+
+Update the `main.bicepparam` file to include the APIM resource ID:
+
+```
+param apiManagementResourceId = '/subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ApiManagement/service/{apimServiceName}'
+```
+
+Then redeploy:
+
+```bash
+az deployment group create \
+  --resource-group <your-resource-group> \
+  --template-file main.bicep \
+  --parameters main.bicepparam
+```
+
+This will create a private endpoint for APIM in the Agent VNet's private endpoint subnet and configure the necessary DNS zones.
+
+### APIM Module Structure
+
+```text
+deploy-apim.bicep                                      # Main APIM deployment template
+modules-network-secured/
+└── agent-to-apim-peering.bicep                        # VNet peering from Agent VNet to APIM VNet
+```
+
+### Network Architecture with APIM
+
+When APIM is deployed, the network topology includes:
+
+- **Agent VNet** (`192.168.0.0/16`): Contains the agent subnet and private endpoint subnet
+- **APIM VNet** (`10.0.0.0/16`): Contains the APIM subnet with VNet injection
+- **Bidirectional VNet Peering**: Enables connectivity between the two VNets
+- **Private Endpoint**: Created in the Agent VNet's PE subnet for APIM Gateway access
+- **Private DNS Zone**: `privatelink.azure-api.net` for APIM name resolution
+
+> **Important:** Ensure that the APIM VNet address space (`10.0.0.0/16` by default) does not overlap with the Agent VNet address space (`192.168.0.0/16` by default) or any other networks in your environment.
+
+---
+
 ## Network Secured Agent Project Architecture Deep Dive
 
 ### Core Components
