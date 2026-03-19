@@ -47,9 +47,12 @@ param modelSkuName string = 'GlobalStandard'
 @description('The tokens per minute (TPM) of your model deployment')
 param modelCapacity int = 30
 
-// Create a short, unique suffix, that will be unique to each resource group
-param deploymentTimestamp string = utcNow('yyyyMMddHHmmss')
-var uniqueSuffix = substring(uniqueString('${resourceGroup().id}-${deploymentTimestamp}'), 0, 4)
+// Unique suffix for resource naming. Pass an explicit value to reuse the same names across deployments.
+// If not provided, a suffix is auto-generated from the resource group ID (stable across deployments).
+@description('Short unique suffix for resource naming. Provide the same value on redeployment to avoid creating duplicate resources.')
+@minLength(2)
+@maxLength(8)
+param uniqueSuffix string = substring(uniqueString(resourceGroup().id), 0, 4)
 var accountName = toLower('${aiServices}${uniqueSuffix}')
 
 @description('Name for your project resource.')

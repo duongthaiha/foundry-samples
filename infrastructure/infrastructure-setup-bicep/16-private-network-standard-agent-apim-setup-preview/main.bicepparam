@@ -12,6 +12,9 @@ param projectDescription = 'A project for the AI Foundry account with network se
 param displayName = 'project'
 param peSubnetName = 'pe-subnet'
 
+// Unique suffix for resource naming - use the same value for redeployments to avoid duplicate resources
+// param uniqueSuffix = 'jh74'
+
 // Resource IDs for existing resources
 // If you provide these, the deployment will use the existing resources instead of creating new ones
 param existingVnetResourceId = ''
