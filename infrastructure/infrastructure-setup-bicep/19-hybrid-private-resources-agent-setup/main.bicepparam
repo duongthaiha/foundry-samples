@@ -20,6 +20,24 @@ param agentSubnetName = 'agent-subnet'
 param aiSearchResourceId = ''
 param azureStorageAccountResourceId = ''
 param azureCosmosDBAccountResourceId = ''
+
+// API Management configuration (optional)
+param apiManagementResourceId = ''
+param deployApiManagement = false
+param publisherEmail = 'apim-admin@contoso.com'
+param publisherName = 'AI Foundry'
+param apimSubnetName = 'apim-subnet'
+
+// APIM Gateway Connection configuration
+param apimConnectionName = 'apim-gateway'
+param apimInferenceApiVersion = '2024-10-21'
+
+// Application Insights
+param deployApplicationInsights = true
+
+// Bastion + Jump Box (set to true for portal access to private resources)
+param deployBastion = false
+
 // Pass the DNS zone map here
 // Leave empty to create new DNS zone, add the resource group of existing DNS zone to use it
 param existingDnsZones = {
@@ -29,6 +47,7 @@ param existingDnsZones = {
   'privatelink.search.windows.net': ''
   'privatelink.blob.core.windows.net': ''
   'privatelink.documents.azure.com': ''
+  'privatelink.azure-api.net': ''
 }
 
 //DNSZones names for validating if they exist
@@ -39,6 +58,7 @@ param dnsZoneNames = [
   'privatelink.search.windows.net'
   'privatelink.blob.core.windows.net'
   'privatelink.documents.azure.com'
+  'privatelink.azure-api.net'
 ]
 
 // Network configuration (behavior depends on `existingVnetResourceId`)

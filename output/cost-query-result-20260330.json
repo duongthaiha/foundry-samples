@@ -1,0 +1,299 @@
+{
+  "timestamp": "2026-03-30T12:31:14.759945Z",
+  "subscription": "3d2c527a-481d-4e13-b3a1-637924b33343",
+  "subscriptionName": "ME-MngEnvMCAP734518-haduong-1",
+  "tenantId": "cdfe81b5-821e-4f07-9ea7-516efc8497e4",
+  "period": {
+    "from": "2026-02-28T00:00:00Z",
+    "to": "2026-03-30T00:00:00Z"
+  },
+  "queries": [
+    "cost-by-service",
+    "cost-by-resource-group",
+    "cost-by-resource"
+  ],
+  "costByService": {
+    "eTag": null,
+    "id": "subscriptions/3d2c527a-481d-4e13-b3a1-637924b33343/providers/Microsoft.CostManagement/query/cecd6126-ef86-4189-bc5b-80d25edc35ee",
+    "location": null,
+    "name": "cecd6126-ef86-4189-bc5b-80d25edc35ee",
+    "properties": {
+      "columns": [
+        {
+          "name": "Cost",
+          "type": "Number"
+        },
+        {
+          "name": "ServiceName",
+          "type": "String"
+        },
+        {
+          "name": "Currency",
+          "type": "String"
+        }
+      ],
+      "nextLink": null,
+      "rows": [
+        [
+          343.67344,
+          "API Management",
+          "USD"
+        ],
+        [
+          64.7573995395206,
+          "Azure App Service",
+          "USD"
+        ],
+        [
+          48.0666933416982,
+          "Azure Bastion",
+          "USD"
+        ],
+        [
+          294.816,
+          "Azure Cognitive Search",
+          "USD"
+        ],
+        [
+          47.760984,
+          "Azure Container Apps",
+          "USD"
+        ],
+        [
+          19.8091660747137,
+          "Azure Cosmos DB",
+          "USD"
+        ],
+        [
+          0.857355635424134,
+          "Azure DNS",
+          "USD"
+        ],
+        [
+          6.20168010752688,
+          "Azure Monitor",
+          "USD"
+        ],
+        [
+          0.0108165987130628,
+          "Bandwidth",
+          "USD"
+        ],
+        [
+          33.8322324832,
+          "Container Registry",
+          "USD"
+        ],
+        [
+          0.0033048,
+          "Event Grid",
+          "USD"
+        ],
+        [
+          94.27334982,
+          "Foundry Models",
+          "USD"
+        ],
+        [
+          379.217014588333,
+          "Foundry Tools",
+          "USD"
+        ],
+        [
+          0.4012412,
+          "Functions",
+          "USD"
+        ],
+        [
+          39.435483234,
+          "GitHub",
+          "USD"
+        ],
+        [
+          6.98701168459226,
+          "Log Analytics",
+          "USD"
+        ],
+        [
+          0.123486078777021,
+          "Logic Apps",
+          "USD"
+        ],
+        [
+          103.901562344928,
+          "Microsoft Defender for Cloud",
+          "USD"
+        ],
+        [
+          0.63442095,
+          "Service Bus",
+          "USD"
+        ],
+        [
+          3.389303591816,
+          "Storage",
+          "USD"
+        ],
+        [
+          0.757677777777778,
+          "VPN Gateway",
+          "USD"
+        ],
+        [
+          3.0561882704,
+          "Virtual Machines",
+          "USD"
+        ],
+        [
+          22.0486097222222,
+          "Virtual Network",
+          "USD"
+        ]
+      ]
+    },
+    "sku": null,
+    "type": "Microsoft.CostManagement/query"
+  },
+  "costByResourceGroup": {
+    "eTag": null,
+    "id": "subscriptions/3d2c527a-481d-4e13-b3a1-637924b33343/providers/Microsoft.CostManagement/query/9be8fa82-4a08-45ad-8d26-4e138a2f935e",
+    "location": null,
+    "name": "9be8fa82-4a08-45ad-8d26-4e138a2f935e",
+    "properties": {
+      "columns": [
+        {
+          "name": "Cost",
+          "type": "Number"
+        },
+        {
+          "name": "ResourceGroupName",
+          "type": "String"
+        },
+        {
+          "name": "Currency",
+          "type": "String"
+        }
+      ],
+      "nextLink": null,
+      "rows": [
+        [
+          42.412351234,
+          "",
+          "USD"
+        ],
+        [
+          29.5393909295479,
+          "callcenter-rg-dev",
+          "USD"
+        ],
+        [
+          48.9638928471869,
+          "callcenter-rg-dev-eastus2",
+          "USD"
+        ],
+        [
+          0.0969086021505376,
+          "default-activitylogalerts",
+          "USD"
+        ],
+        [
+          0.194623655913979,
+          "defaultresourcegroup-sec",
+          "USD"
+        ],
+        [
+          189.705804438055,
+          "foundryapibyovnet",
+          "USD"
+        ],
+        [
+          20.1925865394,
+          "ktbakshduwlregistry_group",
+          "USD"
+        ],
+        [
+          149.38396,
+          "lab-content-safety",
+          "USD"
+        ],
+        [
+          60.0803036703315,
+          "lab-finops-framework",
+          "USD"
+        ],
+        [
+          60.1618436334403,
+          "lab-product-framework",
+          "USD"
+        ],
+        [
+          155.40476,
+          "lab-vector-searching",
+          "USD"
+        ],
+        [
+          3.509363e-05,
+          "rg-aca",
+          "USD"
+        ],
+        [
+          12.2038171686,
+          "rg-aca-healthprobe",
+          "USD"
+        ],
+        [
+          55.420335782272,
+          "rg-agentic-retrieval",
+          "USD"
+        ],
+        [
+          0.078438,
+          "rg-cu-standalone",
+          "USD"
+        ],
+        [
+          37.4864149471396,
+          "rg-devmultiagent",
+          "USD"
+        ],
+        [
+          336.96392178711,
+          "rg-foundry-project",
+          "USD"
+        ],
+        [
+          0.012411,
+          "rg-foundry-sc",
+          "USD"
+        ],
+        [
+          19.6066902390606,
+          "rg-foundry-uk",
+          "USD"
+        ],
+        [
+          3.56906018835125,
+          "rg-hybrid-agent-test",
+          "USD"
+        ],
+        [
+          89.1803801588669,
+          "rg-openai-instances",
+          "USD"
+        ],
+        [
+          60.0041433316133,
+          "rg-voicelive-api-salescoach",
+          "USD"
+        ],
+        [
+          143.352348596973,
+          "techworkshop-l300-ai-agents",
+          "USD"
+        ]
+      ]
+    },
+    "sku": null,
+    "type": "Microsoft.CostManagement/query"
+  }
+}

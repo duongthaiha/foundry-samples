@@ -33,6 +33,8 @@ param storageName string
 param cosmosDBName string
 @description('The Microsoft Fabric Workspace full ARM Resource ID. Optional - leave empty to skip Fabric private endpoint.')
 param fabricWorkspaceResourceId string = ''
+@description('Name of the API Management service (optional)')
+param apiManagementName string = ''
 @description('Name of the Vnet')
 param vnetName string
 @description('Name of the Customer subnet')
@@ -64,6 +66,12 @@ param cosmosDBSubscriptionId string = subscription().subscriptionId
 @description('Resource group name for Cosmos DB account')
 param cosmosDBResourceGroupName string = resourceGroup().name
 
+@description('Subscription ID for API Management service (optional)')
+param apiManagementSubscriptionId string = subscription().subscriptionId
+
+@description('Resource group name for API Management service (optional)')
+param apiManagementResourceGroupName string = resourceGroup().name
+
 @description('Map of DNS zone FQDNs to resource group names. If provided, reference existing DNS zones in this resource group instead of creating them.')
 param existingDnsZones object = {
   'privatelink.services.ai.azure.com': ''
@@ -73,6 +81,7 @@ param existingDnsZones object = {
   'privatelink.blob.${environment().suffixes.storage}': ''
   'privatelink.documents.azure.com': ''
   'privatelink.fabric.microsoft.com': ''
+  'privatelink.azure-api.net': ''
 }
 
 // ---- Resource references ----
@@ -94,6 +103,11 @@ resource storageAccount 'Microsoft.Storage/storageAccounts@2023-05-01' existing 
 resource cosmosDBAccount 'Microsoft.DocumentDB/databaseAccounts@2024-11-15' existing = {
   name: cosmosDBName
   scope: resourceGroup(cosmosDBSubscriptionId, cosmosDBResourceGroupName)
+}
+
+resource apiManagementService 'Microsoft.ApiManagement/service@2023-05-01-preview' existing = if (!empty(apiManagementName)) {
+  name: apiManagementName
+  scope: resourceGroup(apiManagementSubscriptionId, apiManagementResourceGroupName)
 }
 
 // ---- Fabric resource reference (conditional) ----
@@ -219,6 +233,25 @@ resource fabricPrivateEndpoint 'Microsoft.Network/privateEndpoints@2024-05-01' =
   }
 }
 
+/*--------------------------------------------- API Management Private Endpoint -------------------------------------*/
+
+resource apiManagementPrivateEndpoint 'Microsoft.Network/privateEndpoints@2024-05-01' = if (!empty(apiManagementName)) {
+  name: '${apiManagementName}-private-endpoint'
+  location: resourceGroup().location
+  properties: {
+    subnet: { id: peSubnet.id }
+    privateLinkServiceConnections: [
+      {
+        name: '${apiManagementName}-private-link-service-connection'
+        properties: {
+          privateLinkServiceId: apiManagementService.id
+          groupIds: [ 'Gateway' ]
+        }
+      }
+    ]
+  }
+}
+
 /* -------------------------------------------- Private DNS Zones -------------------------------------------- */
 
 // Format: 1) Private DNS Zone
@@ -235,6 +268,7 @@ var aiSearchDnsZoneName = 'privatelink.search.windows.net'
 var storageDnsZoneName = 'privatelink.blob.${environment().suffixes.storage}'
 var cosmosDBDnsZoneName = 'privatelink.documents.azure.com'
 var fabricDnsZoneName = 'privatelink.fabric.microsoft.com'
+var apiManagementDnsZoneName = 'privatelink.azure-api.net'
 
 // ---- DNS Zone Resource Group lookups ----
 var aiServicesDnsZoneRG = existingDnsZones[aiServicesDnsZoneName]
@@ -244,6 +278,7 @@ var aiSearchDnsZoneRG = existingDnsZones[aiSearchDnsZoneName]
 var storageDnsZoneRG = existingDnsZones[storageDnsZoneName]
 var cosmosDBDnsZoneRG = existingDnsZones[cosmosDBDnsZoneName]
 var fabricDnsZoneRG = existingDnsZones.?fabricDnsZoneName ?? ''
+var apiManagementDnsZoneRG = existingDnsZones.?apiManagementDnsZoneName ?? ''
 
 // ---- DNS Zone Resources and References ----
 resource aiServicesPrivateDnsZone 'Microsoft.Network/privateDnsZones@2020-06-01' = if (empty(aiServicesDnsZoneRG)) {
@@ -342,6 +377,20 @@ var fabricDnsZoneId = fabricPassedIn
   ? (empty(fabricDnsZoneRG) ? fabricPrivateDnsZone.id : existingFabricPrivateDnsZone.id)
   : ''
 
+// API Management Private DNS Zone - only created if APIM is provided
+resource apiManagementPrivateDnsZone 'Microsoft.Network/privateDnsZones@2020-06-01' = if (!empty(apiManagementName) && empty(apiManagementDnsZoneRG)) {
+  name: apiManagementDnsZoneName
+  location: 'global'
+}
+
+// Reference existing APIM private DNS zone if provided
+resource existingApiManagementPrivateDnsZone 'Microsoft.Network/privateDnsZones@2020-06-01' existing = if (!empty(apiManagementName) && !empty(apiManagementDnsZoneRG)) {
+  name: apiManagementDnsZoneName
+  scope: resourceGroup(apiManagementDnsZoneRG)
+}
+// APIM DNS Zone ID - conditional based on whether APIM is configured
+var apiManagementDnsZoneId = !empty(apiManagementName) ? (empty(apiManagementDnsZoneRG) ? apiManagementPrivateDnsZone.id : existingApiManagementPrivateDnsZone.id) : ''
+
 // ---- DNS VNet Links ----
 resource aiServicesLink 'Microsoft.Network/privateDnsZones/virtualNetworkLinks@2024-06-01' = if (empty(aiServicesDnsZoneRG)) {
   parent: aiServicesPrivateDnsZone
@@ -403,6 +452,17 @@ resource fabricLink 'Microsoft.Network/privateDnsZones/virtualNetworkLinks@2024-
   parent: fabricPrivateDnsZone
   location: 'global'
   name: 'fabric-${suffix}-link'
+  properties: {
+    virtualNetwork: { id: vnet.id }
+    registrationEnabled: false
+  }
+}
+
+// API Management VNet Link - only created if APIM is provided
+resource apiManagementLink 'Microsoft.Network/privateDnsZones/virtualNetworkLinks@2024-06-01' = if (!empty(apiManagementName) && empty(apiManagementDnsZoneRG)) {
+  parent: apiManagementPrivateDnsZone
+  location: 'global'
+  name: 'apiManagement-${suffix}-link'
   properties: {
     virtualNetwork: { id: vnet.id }
     registrationEnabled: false
@@ -474,5 +534,19 @@ resource fabricDnsGroup 'Microsoft.Network/privateEndpoints/privateDnsZoneGroups
   }
   dependsOn: [
     (fabricPassedIn && empty(fabricDnsZoneRG)) ? fabricLink : null
+  ]
+}
+
+// API Management DNS Zone Group - only created if APIM is provided
+resource apiManagementDnsGroup 'Microsoft.Network/privateEndpoints/privateDnsZoneGroups@2024-05-01' = if (!empty(apiManagementName)) {
+  parent: apiManagementPrivateEndpoint
+  name: '${apiManagementName}-dns-group'
+  properties: {
+    privateDnsZoneConfigs: [
+      { name: '${apiManagementName}-dns-config', properties: { privateDnsZoneId: apiManagementDnsZoneId } }
+    ]
+  }
+  dependsOn: [
+    apiManagementLink
   ]
 }

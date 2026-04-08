@@ -105,6 +105,12 @@ param peSubnetPrefix string = ''
 @description('Address prefix for the MCP subnet. The default value is 192.168.2.0/24.')
 param mcpSubnetPrefix string = ''
 
+@description('The name of the APIM subnet for outbound VNet integration (only used when deployApiManagement is true)')
+param apimSubnetName string = 'apim-subnet'
+
+@description('Address prefix for the APIM subnet. The default value is 192.168.3.0/24.')
+param apimSubnetPrefix string = ''
+
 @description('The AI Search Service full ARM Resource ID. This is an optional field, and if not provided, the resource will be created.')
 param aiSearchResourceId string = ''
 @description('The AI Storage Account full ARM Resource ID. This is an optional field, and if not provided, the resource will be created.')
@@ -114,6 +120,50 @@ param azureCosmosDBAccountResourceId string = ''
 
 @description('The Microsoft Fabric Workspace full ARM Resource ID. This is an optional field for Fabric private link connectivity.')
 param fabricWorkspaceResourceId string = ''
+
+@description('The API Management Service full ARM Resource ID. This is an optional field for existing API Management services.')
+param apiManagementResourceId string = ''
+
+@description('Set to true to deploy an API Management service. If apiManagementResourceId is also provided, the existing resource will be used instead.')
+param deployApiManagement bool = false
+
+@description('The SKU of the API Management service. Only StandardV2 and PremiumV2 support private endpoints.')
+@allowed([
+  'StandardV2'
+  'PremiumV2'
+])
+param apiManagementSku string = 'StandardV2'
+
+@description('The capacity (scale units) of the API Management service')
+param apiManagementCapacity int = 1
+
+@description('Publisher email for the API Management service (required when deployApiManagement is true)')
+param publisherEmail string = 'apim-admin@contoso.com'
+
+@description('Publisher name for the API Management service (required when deployApiManagement is true)')
+param publisherName string = 'AI Foundry'
+
+@description('Name for the APIM gateway connection on the project')
+param apimConnectionName string = 'apim-gateway'
+
+@description('API version for inference calls through APIM (chat completions)')
+param apimInferenceApiVersion string = '2024-10-21'
+
+@description('Static model deployments to expose through the APIM gateway. Each item needs name, properties.model.name, properties.model.version, properties.model.format.')
+param apimModelDeployments array = []
+
+@description('Set to true to deploy Application Insights for agent tracing and logging.')
+param deployApplicationInsights bool = true
+
+@description('Set to true to deploy Azure Bastion and a jump box VM for portal access to private resources.')
+param deployBastion bool = false
+
+@description('Address prefix for AzureBastionSubnet (minimum /26)')
+param bastionSubnetPrefix string = '192.168.4.0/26'
+
+@description('Admin password for the jump box VM (required when deployBastion is true)')
+@secure()
+param jumpboxAdminPassword string = ''
 
 //New Param for resource group of Private DNS zones
 //@description('Optional: Resource group containing existing private DNS zones. If specified, DNS zones will not be created.')
@@ -128,6 +178,7 @@ param existingDnsZones object = {
   'privatelink.blob.core.windows.net': ''
   'privatelink.documents.azure.com': ''
   'privatelink.analysis.windows.net': ''
+  'privatelink.azure-api.net': ''
 }
 
 @description('Zone Names for Validation of existing Private Dns Zones')
@@ -139,12 +190,15 @@ param dnsZoneNames array = [
   'privatelink.blob.core.windows.net'
   'privatelink.documents.azure.com'
   'privatelink.analysis.windows.net'
+  'privatelink.azure-api.net'
 ]
 
 var projectName = toLower('${firstProjectName}${uniqueSuffix}')
 var cosmosDBName = toLower('${aiServices}${uniqueSuffix}cosmosdb')
 var aiSearchName = toLower('${aiServices}${uniqueSuffix}search')
 var azureStorageName = toLower('${aiServices}${uniqueSuffix}storage')
+var apiManagementServiceName = toLower('${aiServices}${uniqueSuffix}apim')
+var appInsightsName = toLower('${aiServices}${uniqueSuffix}appinsights')
 
 // Check if existing resources have been passed in
 var storagePassedIn = azureStorageAccountResourceId != ''
@@ -192,6 +246,28 @@ module vnet 'modules-network-secured/network-agent-vnet.bicep' = {
   }
 }
 
+// Create APIM subnet for outbound VNet integration (only when provisioning APIM)
+var defaultApimSubnetPrefix = '192.168.3.0/24'
+var resolvedApimSubnetPrefix = !empty(apimSubnetPrefix) ? apimSubnetPrefix : (!empty(vnetAddressPrefix) ? cidrSubnet(vnetAddressPrefix, 24, 3) : defaultApimSubnetPrefix)
+
+module apimSubnet 'modules-network-secured/subnet.bicep' = if (deployApiManagement) {
+  name: 'apim-subnet-${uniqueSuffix}-deployment'
+  scope: resourceGroup(vnetResourceGroupName)
+  params: {
+    vnetName: vnet.outputs.virtualNetworkName
+    subnetName: apimSubnetName
+    addressPrefix: resolvedApimSubnetPrefix
+    delegations: [
+      {
+        name: 'Microsoft.Web/serverFarms'
+        properties: {
+          serviceName: 'Microsoft.Web/serverFarms'
+        }
+      }
+    ]
+  }
+}
+
 /*
   Create the AI Services account and gpt-4o model deployment
 */
@@ -209,6 +285,17 @@ module aiAccount 'modules-network-secured/ai-account-identity.bicep' = {
     agentSubnetId: vnet.outputs.agentSubnetId
   }
 }
+
+// Deploy Application Insights for agent tracing and logging
+module applicationInsights 'modules-network-secured/application-insights.bicep' = if (deployApplicationInsights) {
+  name: 'appinsights-${uniqueSuffix}-deployment'
+  params: {
+    location: location
+    accountName: aiAccount.outputs.accountName
+    appInsightsName: appInsightsName
+  }
+}
+
 /*
   Validate existing resources
   This module will check if the AI Search Service, Storage Account, and Cosmos DB Account already exist.
@@ -220,6 +307,7 @@ module validateExistingResources 'modules-network-secured/validate-existing-reso
     aiSearchResourceId: aiSearchResourceId
     azureStorageAccountResourceId: azureStorageAccountResourceId
     azureCosmosDBAccountResourceId: azureCosmosDBAccountResourceId
+    apiManagementResourceId: apiManagementResourceId
     existingDnsZones: existingDnsZones
     dnsZoneNames: dnsZoneNames
   }
@@ -267,6 +355,27 @@ resource cosmosDB 'Microsoft.DocumentDB/databaseAccounts@2024-11-15' existing = 
   scope: resourceGroup(cosmosDBSubscriptionId, cosmosDBResourceGroupName)
 }
 
+// Conditionally create or reference an existing API Management service
+module apimDependencies 'modules-network-secured/api-management.bicep' = if (deployApiManagement) {
+  name: 'apim-${uniqueSuffix}-deployment'
+  params: {
+    location: location
+    apiManagementName: apiManagementServiceName
+    apiManagementSku: apiManagementSku
+    apiManagementCapacity: apiManagementCapacity
+    publisherEmail: publisherEmail
+    publisherName: publisherName
+    apimSubnetId: deployApiManagement ? apimSubnet.outputs.subnetId : ''
+    apiManagementResourceId: apiManagementResourceId
+    apiManagementExists: validateExistingResources.outputs.apiManagementExists
+  }
+}
+
+// Compute the final APIM name and location info from either the provisioning module or validation
+var resolvedApiManagementName = deployApiManagement ? apimDependencies.outputs.apiManagementName : validateExistingResources.outputs.apiManagementName
+var resolvedApiManagementResourceGroupName = deployApiManagement ? apimDependencies.outputs.apiManagementResourceGroupName : validateExistingResources.outputs.apiManagementResourceGroupName
+var resolvedApiManagementSubscriptionId = deployApiManagement ? apimDependencies.outputs.apiManagementSubscriptionId : validateExistingResources.outputs.apiManagementSubscriptionId
+
 // Private Endpoint and DNS Configuration
 // This module sets up private network access for all Azure services:
 // 1. Creates private endpoints in the specified subnet
@@ -281,6 +390,7 @@ module privateEndpointAndDNS 'modules-network-secured/private-endpoint-and-dns.b
     storageName: aiDependencies.outputs.azureStorageName // Storage to secure
     cosmosDBName: aiDependencies.outputs.cosmosDBName
     fabricWorkspaceResourceId: fabricWorkspaceResourceId // Microsoft Fabric workspace (optional)
+    apiManagementName: resolvedApiManagementName // API Management to secure (optional)
     vnetName: vnet.outputs.virtualNetworkName // VNet containing subnets
     peSubnetName: vnet.outputs.peSubnetName // Subnet for private endpoints
     suffix: uniqueSuffix // Unique identifier
@@ -292,6 +402,8 @@ module privateEndpointAndDNS 'modules-network-secured/private-endpoint-and-dns.b
     aiSearchResourceGroupName: aiSearchServiceResourceGroupName // Resource Group for AI Search Service
     storageAccountResourceGroupName: azureStorageResourceGroupName // Resource Group for Storage Account
     storageAccountSubscriptionId: azureStorageSubscriptionId // Subscription ID for Storage Account
+    apiManagementResourceGroupName: resolvedApiManagementResourceGroupName // Resource Group for API Management (if provided)
+    apiManagementSubscriptionId: resolvedApiManagementSubscriptionId // Subscription ID for API Management (if provided)
     existingDnsZones: existingDnsZones
   }
   dependsOn: [
@@ -435,4 +547,53 @@ module cosmosContainerRoleAssignments 'modules-network-secured/cosmos-container-
     addProjectCapabilityHost
     storageContainersRoleAssignment
   ]
+}
+
+// Create APIM gateway connection on the project (only when APIM is deployed/configured)
+var apimConfigured = deployApiManagement || apiManagementResourceId != ''
+// Build default model deployments from the template's model params if none provided
+var defaultModelDeployments = [
+  {
+    name: modelName
+    properties: {
+      model: {
+        name: modelName
+        version: modelVersion
+        format: modelFormat
+      }
+    }
+  }
+]
+var resolvedModelDeployments = length(apimModelDeployments) > 0 ? apimModelDeployments : defaultModelDeployments
+
+module apimGatewayConnection 'modules-network-secured/apim-gateway-connection.bicep' = if (apimConfigured) {
+  name: 'apim-gateway-connection-${uniqueSuffix}-deployment'
+  params: {
+    accountName: aiAccount.outputs.accountName
+    projectName: aiProject.outputs.projectName
+    apimName: resolvedApiManagementName
+    aiServicesEndpoint: 'https://${aiAccount.outputs.accountName}.openai.azure.com'
+    connectionName: apimConnectionName
+    inferenceApiVersion: apimInferenceApiVersion
+    modelDeployments: resolvedModelDeployments
+  }
+  dependsOn: [
+    addProjectCapabilityHost
+    apimDependencies
+    privateEndpointAndDNS
+  ]
+}
+
+// Deploy Azure Bastion and jump box VM for portal access to private resources
+module bastionJumpbox 'modules-network-secured/bastion-jumpbox.bicep' = if (deployBastion) {
+  name: 'bastion-${uniqueSuffix}-deployment'
+  params: {
+    location: location
+    vnetName: vnet.outputs.virtualNetworkName
+    bastionSubnetPrefix: bastionSubnetPrefix
+    vmSubnetName: vnet.outputs.peSubnetName
+    bastionName: '${accountName}-bastion'
+    vmName: '${accountName}-jumpbox'
+    adminPassword: jumpboxAdminPassword
+  }
 }

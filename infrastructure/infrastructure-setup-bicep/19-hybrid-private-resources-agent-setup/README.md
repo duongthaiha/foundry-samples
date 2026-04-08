@@ -31,6 +31,10 @@ This template deploys an Azure AI Foundry account with backend resources (AI Sea
                     │  │ Storage │ │   MCP   │    │
                     │  └─────────┘ │ Servers │    │
                     │              └─────────┘    │
+                    │  ┌─────────┐                │
+                    │  │  APIM   │                │  ◄── Optional (existing)
+                    │  │(Gateway)│                │
+                    │  └─────────┘                │
                     └─────────────────────────────┘
 ```
 
@@ -85,6 +89,7 @@ For detailed setup instructions, see: [Securely connect to Azure AI Foundry](htt
 Use this template when you want:
 - **Private backend resources** — Keep AI Search, Cosmos DB, and Storage behind private endpoints
 - **MCP server integration** — Deploy MCP servers on the VNet that agents can access via Data Proxy
+- **APIM integration** — Connect an existing Azure API Management instance via private endpoint for AI gateway scenarios
 - **Private Foundry (default)** — Full network isolation with secure access via VPN/ExpressRoute/Bastion
 - **Optional public Foundry access** — Switch to public for portal-based development if allowed by your security policy
 
@@ -114,6 +119,28 @@ az deployment group create \
   --template-file main.bicep \
   --parameters location="westus2"
 ```
+
+### Deploy with APIM
+
+To provision a new API Management instance alongside the agent setup:
+
+```bash
+az deployment group create \
+  --resource-group "rg-hybrid-agent-test" \
+  --template-file main.bicep \
+  --parameters location="westus2" deployApiManagement=true publisherEmail="admin@yourorg.com" publisherName="YourOrg"
+```
+
+To use an existing APIM instance:
+
+```bash
+az deployment group create \
+  --resource-group "rg-hybrid-agent-test" \
+  --template-file main.bicep \
+  --parameters location="westus2" apiManagementResourceId="/subscriptions/{sub}/resourceGroups/{rg}/providers/Microsoft.ApiManagement/service/{name}"
+```
+
+> **Note:** Only `StandardV2` and `PremiumV2` APIM SKUs support private endpoints. The default is `StandardV2`.
 
 ### Verify Deployment
 
@@ -185,6 +212,45 @@ Then configure private DNS zone for Container Apps (see TESTING-GUIDE.md Step 6.
 | `agentSubnetName` | Subnet for AI Foundry (reserved) | `agent-subnet` |
 | `peSubnetName` | Subnet for private endpoints | `pe-subnet` |
 | `mcpSubnetName` | Subnet for MCP servers | `mcp-subnet` |
+| `apiManagementResourceId` | Existing APIM resource ID (optional) | `''` |
+| `deployApiManagement` | Set to true to provision APIM | `false` |
+| `apiManagementSku` | APIM SKU (`StandardV2` or `PremiumV2`) | `StandardV2` |
+| `publisherEmail` | APIM publisher email | `apim-admin@contoso.com` |
+| `publisherName` | APIM publisher name | `AI Foundry` |
+| `apimSubnetName` | Subnet for APIM outbound VNet integration | `apim-subnet` |
+| `apimSubnetPrefix` | Address prefix for APIM subnet | `192.168.3.0/24` |
+| `apimConnectionName` | Name for the APIM gateway connection | `apim-gateway` |
+| `apimInferenceApiVersion` | API version for inference calls | `2024-10-21` |
+| `apimModelDeployments` | Static model list for the gateway | Uses template model |
+| `deployApplicationInsights` | Deploy Application Insights for tracing | `true` |
+| `deployBastion` | Deploy Bastion + jump box VM | `false` |
+| `bastionSubnetPrefix` | Address prefix for AzureBastionSubnet | `192.168.4.0/26` |
+| `jumpboxAdminPassword` | Admin password for jump box VM | (required if Bastion deployed) |
+
+## APIM AI Gateway
+
+When APIM is deployed (`deployApiManagement=true`) or an existing APIM is provided (`apiManagementResourceId`), the template automatically:
+1. Imports the Azure OpenAI inference API into APIM
+2. Creates an `ApiManagement` gateway connection on the project with static model metadata
+3. Configures private endpoint + DNS for secure inbound access
+4. Sets up outbound VNet integration for backend connectivity
+
+After deployment, agents can route requests through the APIM gateway using model name format `<connection-name>/<model-name>`:
+
+```python
+# Example: Use APIM gateway model in an agent
+FOUNDRY_MODEL_DEPLOYMENT_NAME = "apim-gateway/gpt-4o-mini"
+```
+
+For testing, see `tests/test_apim_gateway_agents_v2.py`:
+```bash
+export PROJECT_ENDPOINT="https://<ai-services>.services.ai.azure.com/api/projects/<project>"
+python tests/test_apim_gateway_agents_v2.py
+```
+
+For more details, see:
+- [AI Gateway docs](https://learn.microsoft.com/en-us/azure/foundry/agents/how-to/ai-gateway)
+- [APIM Integration Guide](https://github.com/azure-ai-foundry/foundry-samples/blob/main/infrastructure/infrastructure-setup-bicep/01-connections/apim-and-modelgateway-integration-guide.md)
 
 ## Cleanup
 
