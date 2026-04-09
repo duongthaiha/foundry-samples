@@ -165,6 +165,18 @@ param bastionSubnetPrefix string = '192.168.4.0/26'
 @secure()
 param jumpboxAdminPassword string = ''
 
+@description('Set to true to deploy an Azure OpenAI resource in a different region and connect it to the Foundry account.')
+param deployCrossRegionOpenAI bool = false
+
+@description('Azure region for the cross-region Azure OpenAI resource')
+param crossRegionLocation string = 'westus'
+
+@description('Model name to deploy in the cross-region OpenAI resource')
+param crossRegionModelName string = 'gpt-4o'
+
+@description('Model version for the cross-region deployment')
+param crossRegionModelVersion string = '2024-11-20'
+
 //New Param for resource group of Private DNS zones
 //@description('Optional: Resource group containing existing private DNS zones. If specified, DNS zones will not be created.')
 //param existingDnsZonesResourceGroup string = ''
@@ -199,6 +211,7 @@ var aiSearchName = toLower('${aiServices}${uniqueSuffix}search')
 var azureStorageName = toLower('${aiServices}${uniqueSuffix}storage')
 var apiManagementServiceName = toLower('${aiServices}${uniqueSuffix}apim')
 var appInsightsName = toLower('${aiServices}${uniqueSuffix}appinsights')
+var crossRegionOpenAIName = toLower('${aiServices}${uniqueSuffix}openai-${crossRegionLocation}')
 
 // Check if existing resources have been passed in
 var storagePassedIn = azureStorageAccountResourceId != ''
@@ -593,7 +606,31 @@ module bastionJumpbox 'modules-network-secured/bastion-jumpbox.bicep' = if (depl
     bastionSubnetPrefix: bastionSubnetPrefix
     vmSubnetName: vnet.outputs.peSubnetName
     bastionName: '${accountName}-bastion'
-    vmName: '${accountName}-jumpbox'
+    vmName: '${uniqueSuffix}-jumpbox'
     adminPassword: jumpboxAdminPassword
   }
+}
+
+// Deploy cross-region Azure OpenAI resource and connect to Foundry
+module crossRegionOpenAI 'modules-network-secured/cross-region-openai-connection.bicep' = if (deployCrossRegionOpenAI) {
+  name: 'cross-region-openai-${uniqueSuffix}-deployment'
+  params: {
+    location: crossRegionLocation
+    accountName: aiAccount.outputs.accountName
+    projectName: aiProject.outputs.projectName
+    openAIName: crossRegionOpenAIName
+    modelName: crossRegionModelName
+    modelVersion: crossRegionModelVersion
+    apimName: resolvedApiManagementName
+    vnetName: vnet.outputs.virtualNetworkName
+    peSubnetName: vnet.outputs.peSubnetName
+    vnetResourceGroupName: vnet.outputs.virtualNetworkResourceGroup
+  }
+  dependsOn: [
+    aiAccount
+    aiProject
+    apimDependencies
+    addProjectCapabilityHost
+    privateEndpointAndDNS
+  ]
 }

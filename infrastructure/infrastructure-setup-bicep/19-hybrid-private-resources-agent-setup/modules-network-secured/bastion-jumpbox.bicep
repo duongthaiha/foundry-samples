@@ -38,6 +38,34 @@ param adminUsername string = 'azureuser'
 @secure()
 param adminPassword string
 
+// ---- NAT Gateway for outbound internet ----
+resource natGatewayPip 'Microsoft.Network/publicIPAddresses@2024-05-01' = {
+  name: '${vmName}-nat-pip'
+  location: location
+  sku: {
+    name: 'Standard'
+  }
+  properties: {
+    publicIPAllocationMethod: 'Static'
+  }
+}
+
+resource natGateway 'Microsoft.Network/natGateways@2024-05-01' = {
+  name: '${vmName}-nat-gw'
+  location: location
+  sku: {
+    name: 'Standard'
+  }
+  properties: {
+    idleTimeoutInMinutes: 10
+    publicIpAddresses: [
+      {
+        id: natGatewayPip.id
+      }
+    ]
+  }
+}
+
 // ---- Bastion Subnet ----
 resource bastionSubnet 'Microsoft.Network/virtualNetworks/subnets@2024-05-01' = {
   name: '${vnetName}/AzureBastionSubnet'
@@ -92,6 +120,22 @@ resource vmSubnet 'Microsoft.Network/virtualNetworks/subnets@2024-05-01' existin
   parent: existingVnet
 }
 
+// Attach NAT gateway to VM subnet for outbound internet
+resource vmSubnetWithNat 'Microsoft.Network/virtualNetworks/subnets@2024-05-01' = {
+  name: vmSubnetName
+  parent: existingVnet
+  properties: {
+    addressPrefix: vmSubnet.properties.addressPrefix
+    natGateway: {
+      id: natGateway.id
+    }
+    networkSecurityGroup: vmSubnet.properties.networkSecurityGroup
+  }
+  dependsOn: [
+    bastionSubnet
+  ]
+}
+
 resource vmNic 'Microsoft.Network/networkInterfaces@2024-05-01' = {
   name: '${vmName}-nic'
   location: location
@@ -101,7 +145,7 @@ resource vmNic 'Microsoft.Network/networkInterfaces@2024-05-01' = {
         name: 'ipconfig1'
         properties: {
           subnet: {
-            id: vmSubnet.id
+            id: vmSubnetWithNat.id
           }
           privateIPAllocationMethod: 'Dynamic'
         }

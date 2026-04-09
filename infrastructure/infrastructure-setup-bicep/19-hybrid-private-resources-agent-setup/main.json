@@ -5,7 +5,7 @@
     "_generator": {
       "name": "bicep",
       "version": "0.42.1.51946",
-      "templateHash": "840357392731690686"
+      "templateHash": "16129139177607027313"
     }
   },
   "parameters": {
@@ -309,6 +309,34 @@
         "description": "Admin password for the jump box VM (required when deployBastion is true)"
       }
     },
+    "deployCrossRegionOpenAI": {
+      "type": "bool",
+      "defaultValue": false,
+      "metadata": {
+        "description": "Set to true to deploy an Azure OpenAI resource in a different region and connect it to the Foundry account."
+      }
+    },
+    "crossRegionLocation": {
+      "type": "string",
+      "defaultValue": "westus",
+      "metadata": {
+        "description": "Azure region for the cross-region Azure OpenAI resource"
+      }
+    },
+    "crossRegionModelName": {
+      "type": "string",
+      "defaultValue": "gpt-4o",
+      "metadata": {
+        "description": "Model name to deploy in the cross-region OpenAI resource"
+      }
+    },
+    "crossRegionModelVersion": {
+      "type": "string",
+      "defaultValue": "2024-11-20",
+      "metadata": {
+        "description": "Model version for the cross-region deployment"
+      }
+    },
     "existingDnsZones": {
       "type": "object",
       "defaultValue": {
@@ -358,6 +386,7 @@
     "azureStorageName": "[toLower(format('{0}{1}storage', parameters('aiServices'), variables('uniqueSuffix')))]",
     "apiManagementServiceName": "[toLower(format('{0}{1}apim', parameters('aiServices'), variables('uniqueSuffix')))]",
     "appInsightsName": "[toLower(format('{0}{1}appinsights', parameters('aiServices'), variables('uniqueSuffix')))]",
+    "crossRegionOpenAIName": "[toLower(format('{0}{1}openai-{2}', parameters('aiServices'), variables('uniqueSuffix'), parameters('crossRegionLocation')))]",
     "storagePassedIn": "[not(equals(parameters('azureStorageAccountResourceId'), ''))]",
     "searchPassedIn": "[not(equals(parameters('aiSearchResourceId'), ''))]",
     "cosmosPassedIn": "[not(equals(parameters('azureCosmosDBAccountResourceId'), ''))]",
@@ -3822,7 +3851,7 @@
             "value": "[format('{0}-bastion', variables('accountName'))]"
           },
           "vmName": {
-            "value": "[format('{0}-jumpbox', variables('accountName'))]"
+            "value": "[format('{0}-jumpbox', variables('uniqueSuffix'))]"
           },
           "adminPassword": {
             "value": "[parameters('jumpboxAdminPassword')]"
@@ -3835,7 +3864,7 @@
             "_generator": {
               "name": "bicep",
               "version": "0.42.1.51946",
-              "templateHash": "1605774601905254789"
+              "templateHash": "7953078713756310465"
             }
           },
           "parameters": {
@@ -3902,6 +3931,38 @@
           },
           "resources": [
             {
+              "type": "Microsoft.Network/publicIPAddresses",
+              "apiVersion": "2024-05-01",
+              "name": "[format('{0}-nat-pip', parameters('vmName'))]",
+              "location": "[parameters('location')]",
+              "sku": {
+                "name": "Standard"
+              },
+              "properties": {
+                "publicIPAllocationMethod": "Static"
+              }
+            },
+            {
+              "type": "Microsoft.Network/natGateways",
+              "apiVersion": "2024-05-01",
+              "name": "[format('{0}-nat-gw', parameters('vmName'))]",
+              "location": "[parameters('location')]",
+              "sku": {
+                "name": "Standard"
+              },
+              "properties": {
+                "idleTimeoutInMinutes": 10,
+                "publicIpAddresses": [
+                  {
+                    "id": "[resourceId('Microsoft.Network/publicIPAddresses', format('{0}-nat-pip', parameters('vmName')))]"
+                  }
+                ]
+              },
+              "dependsOn": [
+                "[resourceId('Microsoft.Network/publicIPAddresses', format('{0}-nat-pip', parameters('vmName')))]"
+              ]
+            },
+            {
               "type": "Microsoft.Network/virtualNetworks/subnets",
               "apiVersion": "2024-05-01",
               "name": "[format('{0}/AzureBastionSubnet', parameters('vnetName'))]",
@@ -3950,6 +4011,22 @@
               ]
             },
             {
+              "type": "Microsoft.Network/virtualNetworks/subnets",
+              "apiVersion": "2024-05-01",
+              "name": "[format('{0}/{1}', parameters('vnetName'), parameters('vmSubnetName'))]",
+              "properties": {
+                "addressPrefix": "[reference(resourceId('Microsoft.Network/virtualNetworks/subnets', parameters('vnetName'), parameters('vmSubnetName')), '2024-05-01').addressPrefix]",
+                "natGateway": {
+                  "id": "[resourceId('Microsoft.Network/natGateways', format('{0}-nat-gw', parameters('vmName')))]"
+                },
+                "networkSecurityGroup": "[reference(resourceId('Microsoft.Network/virtualNetworks/subnets', parameters('vnetName'), parameters('vmSubnetName')), '2024-05-01').networkSecurityGroup]"
+              },
+              "dependsOn": [
+                "[resourceId('Microsoft.Network/virtualNetworks/subnets', split(format('{0}/AzureBastionSubnet', parameters('vnetName')), '/')[0], split(format('{0}/AzureBastionSubnet', parameters('vnetName')), '/')[1])]",
+                "[resourceId('Microsoft.Network/natGateways', format('{0}-nat-gw', parameters('vmName')))]"
+              ]
+            },
+            {
               "type": "Microsoft.Network/networkInterfaces",
               "apiVersion": "2024-05-01",
               "name": "[format('{0}-nic', parameters('vmName'))]",
@@ -3968,7 +4045,8 @@
                 ]
               },
               "dependsOn": [
-                "[resourceId('Microsoft.Network/virtualNetworks/subnets', split(format('{0}/AzureBastionSubnet', parameters('vnetName')), '/')[0], split(format('{0}/AzureBastionSubnet', parameters('vnetName')), '/')[1])]"
+                "[resourceId('Microsoft.Network/virtualNetworks/subnets', split(format('{0}/AzureBastionSubnet', parameters('vnetName')), '/')[0], split(format('{0}/AzureBastionSubnet', parameters('vnetName')), '/')[1])]",
+                "[resourceId('Microsoft.Network/virtualNetworks/subnets', parameters('vnetName'), parameters('vmSubnetName'))]"
               ]
             },
             {
@@ -4029,6 +4107,370 @@
         }
       },
       "dependsOn": [
+        "[resourceId('Microsoft.Resources/deployments', format('vnet-{0}-{1}-deployment', variables('trimVnetName'), variables('uniqueSuffix')))]"
+      ]
+    },
+    {
+      "condition": "[parameters('deployCrossRegionOpenAI')]",
+      "type": "Microsoft.Resources/deployments",
+      "apiVersion": "2025-04-01",
+      "name": "[format('cross-region-openai-{0}-deployment', variables('uniqueSuffix'))]",
+      "properties": {
+        "expressionEvaluationOptions": {
+          "scope": "inner"
+        },
+        "mode": "Incremental",
+        "parameters": {
+          "location": {
+            "value": "[parameters('crossRegionLocation')]"
+          },
+          "accountName": {
+            "value": "[reference(resourceId('Microsoft.Resources/deployments', format('{0}-{1}-deployment', variables('accountName'), variables('uniqueSuffix'))), '2025-04-01').outputs.accountName.value]"
+          },
+          "projectName": {
+            "value": "[reference(resourceId('Microsoft.Resources/deployments', format('{0}-{1}-deployment', variables('projectName'), variables('uniqueSuffix'))), '2025-04-01').outputs.projectName.value]"
+          },
+          "openAIName": {
+            "value": "[variables('crossRegionOpenAIName')]"
+          },
+          "modelName": {
+            "value": "[parameters('crossRegionModelName')]"
+          },
+          "modelVersion": {
+            "value": "[parameters('crossRegionModelVersion')]"
+          },
+          "apimName": "[if(parameters('deployApiManagement'), createObject('value', reference(resourceId('Microsoft.Resources/deployments', format('apim-{0}-deployment', variables('uniqueSuffix'))), '2025-04-01').outputs.apiManagementName.value), createObject('value', reference(resourceId('Microsoft.Resources/deployments', format('validate-existing-resources-{0}-deployment', variables('uniqueSuffix'))), '2025-04-01').outputs.apiManagementName.value))]",
+          "vnetName": {
+            "value": "[reference(resourceId('Microsoft.Resources/deployments', format('vnet-{0}-{1}-deployment', variables('trimVnetName'), variables('uniqueSuffix'))), '2025-04-01').outputs.virtualNetworkName.value]"
+          },
+          "peSubnetName": {
+            "value": "[reference(resourceId('Microsoft.Resources/deployments', format('vnet-{0}-{1}-deployment', variables('trimVnetName'), variables('uniqueSuffix'))), '2025-04-01').outputs.peSubnetName.value]"
+          },
+          "vnetResourceGroupName": {
+            "value": "[reference(resourceId('Microsoft.Resources/deployments', format('vnet-{0}-{1}-deployment', variables('trimVnetName'), variables('uniqueSuffix'))), '2025-04-01').outputs.virtualNetworkResourceGroup.value]"
+          }
+        },
+        "template": {
+          "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+          "contentVersion": "1.0.0.0",
+          "metadata": {
+            "_generator": {
+              "name": "bicep",
+              "version": "0.42.1.51946",
+              "templateHash": "5890920204839190065"
+            }
+          },
+          "parameters": {
+            "location": {
+              "type": "string",
+              "defaultValue": "westus",
+              "metadata": {
+                "description": "Azure region for the cross-region OpenAI resource"
+              }
+            },
+            "accountName": {
+              "type": "string",
+              "metadata": {
+                "description": "Name of the AI Foundry account to connect to"
+              }
+            },
+            "projectName": {
+              "type": "string",
+              "metadata": {
+                "description": "Name of the project"
+              }
+            },
+            "openAIName": {
+              "type": "string",
+              "metadata": {
+                "description": "Name for the cross-region Azure OpenAI resource"
+              }
+            },
+            "customSubDomainName": {
+              "type": "string",
+              "defaultValue": "",
+              "metadata": {
+                "description": "Custom subdomain name for the OpenAI resource (required for private endpoints)"
+              }
+            },
+            "modelName": {
+              "type": "string",
+              "defaultValue": "gpt-4o",
+              "metadata": {
+                "description": "Model name to deploy"
+              }
+            },
+            "modelVersion": {
+              "type": "string",
+              "defaultValue": "2024-11-20",
+              "metadata": {
+                "description": "Model version"
+              }
+            },
+            "modelSkuName": {
+              "type": "string",
+              "defaultValue": "GlobalStandard",
+              "metadata": {
+                "description": "Model SKU"
+              }
+            },
+            "modelCapacity": {
+              "type": "int",
+              "defaultValue": 30,
+              "metadata": {
+                "description": "Model capacity (TPM)"
+              }
+            },
+            "apimName": {
+              "type": "string",
+              "metadata": {
+                "description": "Name of the APIM service to route through"
+              }
+            },
+            "apimApiName": {
+              "type": "string",
+              "defaultValue": "azure-openai-crossregion",
+              "metadata": {
+                "description": "Name for the APIM API"
+              }
+            },
+            "connectionName": {
+              "type": "string",
+              "defaultValue": "apim-gateway-crossregion",
+              "metadata": {
+                "description": "Name for the gateway connection on the project"
+              }
+            },
+            "inferenceApiVersion": {
+              "type": "string",
+              "defaultValue": "2024-10-21",
+              "metadata": {
+                "description": "API version for inference calls"
+              }
+            },
+            "apimSubscriptionKeyName": {
+              "type": "string",
+              "defaultValue": "master",
+              "metadata": {
+                "description": "APIM subscription name for API key"
+              }
+            },
+            "vnetName": {
+              "type": "string",
+              "defaultValue": "",
+              "metadata": {
+                "description": "VNet name for the private endpoint (in the primary region)"
+              }
+            },
+            "peSubnetName": {
+              "type": "string",
+              "defaultValue": "pe-subnet",
+              "metadata": {
+                "description": "Subnet name for the private endpoint"
+              }
+            },
+            "vnetResourceGroupName": {
+              "type": "string",
+              "defaultValue": "[resourceGroup().name]",
+              "metadata": {
+                "description": "Resource group of the VNet"
+              }
+            }
+          },
+          "variables": {
+            "finalCustomDomain": "[if(not(empty(parameters('customSubDomainName'))), parameters('customSubDomainName'), parameters('openAIName'))]",
+            "createPrivateEndpoint": "[not(empty(parameters('vnetName')))]",
+            "staticModels": [
+              {
+                "name": "[parameters('modelName')]",
+                "properties": {
+                  "model": {
+                    "name": "[parameters('modelName')]",
+                    "version": "[parameters('modelVersion')]",
+                    "format": "OpenAI"
+                  }
+                }
+              }
+            ]
+          },
+          "resources": [
+            {
+              "type": "Microsoft.CognitiveServices/accounts",
+              "apiVersion": "2025-04-01-preview",
+              "name": "[parameters('openAIName')]",
+              "location": "[parameters('location')]",
+              "kind": "OpenAI",
+              "sku": {
+                "name": "S0"
+              },
+              "properties": {
+                "publicNetworkAccess": "Enabled",
+                "customSubDomainName": "[variables('finalCustomDomain')]"
+              }
+            },
+            {
+              "type": "Microsoft.CognitiveServices/accounts/deployments",
+              "apiVersion": "2025-04-01-preview",
+              "name": "[format('{0}/{1}', parameters('openAIName'), parameters('modelName'))]",
+              "sku": {
+                "name": "[parameters('modelSkuName')]",
+                "capacity": "[parameters('modelCapacity')]"
+              },
+              "properties": {
+                "model": {
+                  "name": "[parameters('modelName')]",
+                  "format": "OpenAI",
+                  "version": "[parameters('modelVersion')]"
+                }
+              },
+              "dependsOn": [
+                "[resourceId('Microsoft.CognitiveServices/accounts', parameters('openAIName'))]"
+              ]
+            },
+            {
+              "type": "Microsoft.Authorization/roleAssignments",
+              "apiVersion": "2022-04-01",
+              "scope": "[resourceId('Microsoft.CognitiveServices/accounts', parameters('openAIName'))]",
+              "name": "[guid(resourceId('Microsoft.CognitiveServices/accounts', parameters('openAIName')), resourceId('Microsoft.ApiManagement/service', parameters('apimName')), '5e0bd9bd-7b93-4f28-af87-19fc36ad61bd')]",
+              "properties": {
+                "principalId": "[reference(resourceId('Microsoft.ApiManagement/service', parameters('apimName')), '2024-05-01', 'full').identity.principalId]",
+                "principalType": "ServicePrincipal",
+                "roleDefinitionId": "[subscriptionResourceId('Microsoft.Authorization/roleDefinitions', '5e0bd9bd-7b93-4f28-af87-19fc36ad61bd')]"
+              },
+              "dependsOn": [
+                "[resourceId('Microsoft.CognitiveServices/accounts', parameters('openAIName'))]"
+              ]
+            },
+            {
+              "type": "Microsoft.ApiManagement/service/apis",
+              "apiVersion": "2024-05-01",
+              "name": "[format('{0}/{1}', parameters('apimName'), parameters('apimApiName'))]",
+              "properties": {
+                "displayName": "[format('Azure OpenAI {0}', parameters('location'))]",
+                "path": "[format('openai-{0}', parameters('location'))]",
+                "protocols": [
+                  "https"
+                ],
+                "format": "openapi-link",
+                "value": "[format('https://raw.githubusercontent.com/Azure/azure-rest-api-specs/main/specification/cognitiveservices/data-plane/AzureOpenAI/inference/stable/{0}/inference.json', parameters('inferenceApiVersion'))]",
+                "serviceUrl": "[format('https://{0}.openai.azure.com/openai', variables('finalCustomDomain'))]",
+                "subscriptionRequired": false
+              }
+            },
+            {
+              "type": "Microsoft.ApiManagement/service/apis/policies",
+              "apiVersion": "2024-05-01",
+              "name": "[format('{0}/{1}/{2}', parameters('apimName'), parameters('apimApiName'), 'policy')]",
+              "properties": {
+                "format": "xml",
+                "value": "<policies><inbound><base /><authentication-managed-identity resource=\"https://cognitiveservices.azure.com/\" /></inbound><backend><base /></backend><outbound><base /></outbound><on-error><base /></on-error></policies>"
+              },
+              "dependsOn": [
+                "[resourceId('Microsoft.ApiManagement/service/apis', parameters('apimName'), parameters('apimApiName'))]"
+              ]
+            },
+            {
+              "condition": "[variables('createPrivateEndpoint')]",
+              "type": "Microsoft.Network/privateEndpoints",
+              "apiVersion": "2024-05-01",
+              "name": "[format('{0}-private-endpoint', parameters('openAIName'))]",
+              "location": "[resourceGroup().location]",
+              "properties": {
+                "subnet": {
+                  "id": "[extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, parameters('vnetResourceGroupName')), 'Microsoft.Network/virtualNetworks/subnets', parameters('vnetName'), parameters('peSubnetName'))]"
+                },
+                "privateLinkServiceConnections": [
+                  {
+                    "name": "[format('{0}-private-link-service-connection', parameters('openAIName'))]",
+                    "properties": {
+                      "privateLinkServiceId": "[resourceId('Microsoft.CognitiveServices/accounts', parameters('openAIName'))]",
+                      "groupIds": [
+                        "account"
+                      ]
+                    }
+                  }
+                ]
+              },
+              "dependsOn": [
+                "[resourceId('Microsoft.CognitiveServices/accounts', parameters('openAIName'))]"
+              ]
+            },
+            {
+              "condition": "[variables('createPrivateEndpoint')]",
+              "type": "Microsoft.Network/privateEndpoints/privateDnsZoneGroups",
+              "apiVersion": "2024-05-01",
+              "name": "[format('{0}/{1}', format('{0}-private-endpoint', parameters('openAIName')), format('{0}-dns-group', parameters('openAIName')))]",
+              "properties": {
+                "privateDnsZoneConfigs": [
+                  {
+                    "name": "openai-dns-config",
+                    "properties": {
+                      "privateDnsZoneId": "[resourceId('Microsoft.Network/privateDnsZones', 'privatelink.openai.azure.com')]"
+                    }
+                  }
+                ]
+              },
+              "dependsOn": [
+                "[resourceId('Microsoft.Network/privateEndpoints', format('{0}-private-endpoint', parameters('openAIName')))]"
+              ]
+            },
+            {
+              "type": "Microsoft.CognitiveServices/accounts/projects/connections",
+              "apiVersion": "2025-04-01-preview",
+              "name": "[format('{0}/{1}/{2}', parameters('accountName'), parameters('projectName'), parameters('connectionName'))]",
+              "properties": {
+                "category": "ApiManagement",
+                "target": "[format('{0}/{1}', reference(resourceId('Microsoft.ApiManagement/service', parameters('apimName')), '2024-05-01').gatewayUrl, reference(resourceId('Microsoft.ApiManagement/service/apis', parameters('apimName'), parameters('apimApiName')), '2024-05-01').path)]",
+                "authType": "ApiKey",
+                "isSharedToAll": true,
+                "credentials": {
+                  "key": "[listSecrets(resourceId('Microsoft.ApiManagement/service/subscriptions', parameters('apimName'), parameters('apimSubscriptionKeyName')), '2024-05-01').primaryKey]"
+                },
+                "metadata": {
+                  "deploymentInPath": "true",
+                  "inferenceAPIVersion": "[parameters('inferenceApiVersion')]",
+                  "models": "[string(variables('staticModels'))]"
+                }
+              },
+              "dependsOn": [
+                "[resourceId('Microsoft.ApiManagement/service/apis', parameters('apimName'), parameters('apimApiName'))]",
+                "[resourceId('Microsoft.ApiManagement/service/apis/policies', parameters('apimName'), parameters('apimApiName'), 'policy')]",
+                "[extensionResourceId(resourceId('Microsoft.CognitiveServices/accounts', parameters('openAIName')), 'Microsoft.Authorization/roleAssignments', guid(resourceId('Microsoft.CognitiveServices/accounts', parameters('openAIName')), resourceId('Microsoft.ApiManagement/service', parameters('apimName')), '5e0bd9bd-7b93-4f28-af87-19fc36ad61bd'))]",
+                "[resourceId('Microsoft.CognitiveServices/accounts/deployments', parameters('openAIName'), parameters('modelName'))]"
+              ]
+            }
+          ],
+          "outputs": {
+            "openAIName": {
+              "type": "string",
+              "value": "[parameters('openAIName')]"
+            },
+            "openAIEndpoint": {
+              "type": "string",
+              "value": "[reference(resourceId('Microsoft.CognitiveServices/accounts', parameters('openAIName')), '2025-04-01-preview').endpoint]"
+            },
+            "connectionName": {
+              "type": "string",
+              "value": "[parameters('connectionName')]"
+            },
+            "modelDeploymentName": {
+              "type": "string",
+              "value": "[parameters('modelName')]"
+            },
+            "apimApiPath": {
+              "type": "string",
+              "value": "[reference(resourceId('Microsoft.ApiManagement/service/apis', parameters('apimName'), parameters('apimApiName')), '2024-05-01').path]"
+            }
+          }
+        }
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.Resources/deployments', format('capabilityHost-configuration-{0}-deployment', variables('uniqueSuffix')))]",
+        "[resourceId('Microsoft.Resources/deployments', format('{0}-{1}-deployment', variables('accountName'), variables('uniqueSuffix')))]",
+        "[resourceId('Microsoft.Resources/deployments', format('{0}-{1}-deployment', variables('projectName'), variables('uniqueSuffix')))]",
+        "[resourceId('Microsoft.Resources/deployments', format('apim-{0}-deployment', variables('uniqueSuffix')))]",
+        "[resourceId('Microsoft.Resources/deployments', format('{0}-private-endpoint', variables('uniqueSuffix')))]",
+        "[resourceId('Microsoft.Resources/deployments', format('validate-existing-resources-{0}-deployment', variables('uniqueSuffix')))]",
         "[resourceId('Microsoft.Resources/deployments', format('vnet-{0}-{1}-deployment', variables('trimVnetName'), variables('uniqueSuffix')))]"
       ]
     }

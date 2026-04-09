@@ -226,6 +226,9 @@ Then configure private DNS zone for Container Apps (see TESTING-GUIDE.md Step 6.
 | `deployBastion` | Deploy Bastion + jump box VM | `false` |
 | `bastionSubnetPrefix` | Address prefix for AzureBastionSubnet | `192.168.4.0/26` |
 | `jumpboxAdminPassword` | Admin password for jump box VM | (required if Bastion deployed) |
+| `deployCrossRegionOpenAI` | Deploy Azure OpenAI in a different region | `false` |
+| `crossRegionLocation` | Region for cross-region OpenAI | `westus` |
+| `crossRegionModelName` | Model to deploy cross-region | `gpt-4o` |
 
 ## APIM AI Gateway
 

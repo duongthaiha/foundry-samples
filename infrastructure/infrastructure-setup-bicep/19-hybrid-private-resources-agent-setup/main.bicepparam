@@ -38,6 +38,11 @@ param deployApplicationInsights = true
 // Bastion + Jump Box (set to true for portal access to private resources)
 param deployBastion = false
 
+// Cross-region Azure OpenAI connection
+param deployCrossRegionOpenAI = false
+param crossRegionLocation = 'westus'
+param crossRegionModelName = 'gpt-4o'
+
 // Pass the DNS zone map here
 // Leave empty to create new DNS zone, add the resource group of existing DNS zone to use it
 param existingDnsZones = {
