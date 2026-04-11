@@ -1,12 +1,16 @@
 # Hybrid Private Resources Agent Setup
 
-This template deploys an Azure AI Foundry account with backend resources (AI Search, Cosmos DB, Storage) on **private endpoints**. By default, the Foundry resource itself also has **public network access disabled**, but this can be switched to public access if needed (see [Switching Between Private and Public Access](#switching-between-private-and-public-access)).
+This template deploys an Azure AI Foundry account with backend resources (AI Search, Cosmos DB, Storage) on **private endpoints**, with optional **APIM AI Gateway**, **cross-region OpenAI**, **Application Insights**, and **Azure Bastion** for secure portal access.
 
-## Architecture (Default — Private Foundry)
+By default, the Foundry resource has **public network access disabled**, but this can be switched to public access if needed (see [Switching Between Private and Public Access](#switching-between-private-and-public-access)).
+
+## Architecture
+
+See [diagrams/architecture.md](diagrams/architecture.md) for the full Mermaid infrastructure diagram, and [diagrams/sequence-diagram.md](diagrams/sequence-diagram.md) for agent interaction sequence diagrams.
 
 ```
 ┌─────────────────────────────────────────────────────────────────────┐
-│  Secure Access (VPN Gateway / ExpressRoute / Azure Bastion)         │
+│  Secure Access (VPN Gateway / Azure Bastion / ExpressRoute)         │
 └──────────────────────────────────┬──────────────────────────────────┘
                                    │
                     ┌──────────────▼──────────────┐
@@ -31,163 +35,300 @@ This template deploys an Azure AI Foundry account with backend resources (AI Sea
                     │  │ Storage │ │   MCP   │    │
                     │  └─────────┘ │ Servers │    │
                     │              └─────────┘    │
-                    │  ┌─────────┐                │
-                    │  │  APIM   │                │  ◄── Optional (existing)
-                    │  │(Gateway)│                │
-                    │  └─────────┘                │
+                    │  ┌─────────┐ ┌─────────┐    │
+                    │  │  APIM   │ │ Bastion │    │  ◄── Optional
+                    │  │(Gateway)│ │+ JumpBox│    │
+                    │  └─────────┘ └─────────┘    │
+                    │                              │
+                    │  ┌──────────────────────┐    │
+                    │  │ Cross-Region OpenAI  │    │  ◄── Optional (via PE)
+                    │  │    (e.g., westus)    │    │
+                    │  └──────────────────────┘    │
                     └─────────────────────────────┘
 ```
 
 ## Key Features
 
-| Feature | This Template (19) — Private (default) | This Template (19) — Public | Fully Private (15) |
-|---------|----------------------------------------|-----------------------------|-----------------------|
-| AI Services public access | ❌ Disabled | ✅ Enabled | ❌ Disabled |
-| Portal access | Via VPN/ExpressRoute/Bastion | ✅ Works directly | Via VPN/ExpressRoute/Bastion |
-| Backend resources | 🔒 Private | 🔒 Private | 🔒 Private |
-| Data Proxy | ✅ Configured | ✅ Configured | ✅ Configured |
-| Secure connection required | ✅ Yes | ❌ No | ✅ Yes |
+| Feature | Description |
+|---------|-------------|
+| **Private backend resources** | AI Search, Cosmos DB, Storage behind private endpoints |
+| **MCP server integration** | Deploy MCP servers on the VNet via Data Proxy |
+| **APIM AI Gateway** | Route agent model requests through APIM with managed identity auth |
+| **Cross-region OpenAI** | Access models in different regions via APIM gateway + private endpoints |
+| **Application Insights** | Agent tracing and observability with Log Analytics |
+| **Azure Bastion + Jump Box** | Portal access to private resources without VPN |
+| **Private/Public toggle** | Switch Foundry between private and public access |
 
-## Switching Between Private and Public Access
+## Modules
 
-The Foundry resource has **public network access disabled by default**. You can switch between the two modes by modifying the Bicep template.
-
-### To enable public access
-
-In [modules-network-secured/ai-account-identity.bicep](modules-network-secured/ai-account-identity.bicep), change:
-
-```bicep
-// Change from:
-publicNetworkAccess: 'Disabled'
-// To:
-publicNetworkAccess: 'Enabled'
-
-// Also change:
-defaultAction: 'Deny'
-// To:
-defaultAction: 'Allow'
-```
-
-This makes the Foundry resource accessible from the internet (e.g., for portal-based development without VPN).
-
-### To disable public access (default)
-
-Revert the changes above, setting `publicNetworkAccess: 'Disabled'` and `defaultAction: 'Deny'`.
-
-## Connecting to a Private Foundry Resource
-
-When public network access is disabled (the default), you need a secure connection to reach the Foundry resource. Azure provides three methods:
-
-1. **Azure VPN Gateway** — Connect from your local network to the Azure VNet over an encrypted tunnel.
-2. **Azure ExpressRoute** — Use a private, dedicated connection from your on-premises infrastructure to Azure.
-3. **Azure Bastion** — Use a jump box VM on the VNet, accessed securely through the Azure portal.
-
-For detailed setup instructions, see: [Securely connect to Azure AI Foundry](https://learn.microsoft.com/en-us/azure/ai-foundry/how-to/configure-private-link?view=foundry#securely-connect-to-foundry).
-
-## When to Use This Template
-
-Use this template when you want:
-- **Private backend resources** — Keep AI Search, Cosmos DB, and Storage behind private endpoints
-- **MCP server integration** — Deploy MCP servers on the VNet that agents can access via Data Proxy
-- **APIM integration** — Connect an existing Azure API Management instance via private endpoint for AI gateway scenarios
-- **Private Foundry (default)** — Full network isolation with secure access via VPN/ExpressRoute/Bastion
-- **Optional public Foundry access** — Switch to public for portal-based development if allowed by your security policy
-
-## When NOT to Use This Template
-
-Use [template 15](../15-private-network-standard-agent-setup/) instead when you need:
-- **Fully managed private networking** — Including managed VNet with Microsoft-managed private endpoints
-- **Compliance requirements** — Regulations that require a different private networking topology
+| Module | Description |
+|--------|-------------|
+| `network-agent-vnet.bicep` | VNet with agent, PE, MCP, APIM, Bastion, and Gateway subnets |
+| `ai-account-identity.bicep` | AI Services account with model deployment |
+| `ai-project-identity.bicep` | Foundry project with connections (Cosmos DB, Storage, AI Search) |
+| `standard-dependent-resources.bicep` | Cosmos DB, AI Search, Storage (create or use existing) |
+| `private-endpoint-and-dns.bicep` | Private endpoints + DNS zones for all services (including APIM, Fabric) |
+| `api-management.bicep` | APIM StandardV2/PremiumV2 with outbound VNet integration |
+| `apim-gateway-connection.bicep` | Import OpenAI API into APIM + create ApiManagement gateway connection |
+| `cross-region-openai-connection.bicep` | Cross-region OpenAI + model + APIM API + PE + DNS + gateway connection |
+| `application-insights.bicep` | Log Analytics workspace + Application Insights + Foundry connection |
+| `bastion-jumpbox.bicep` | Azure Bastion + Windows jump box VM + NAT gateway |
+| `validate-existing-resources.bicep` | Validates existing resources (AI Search, Storage, Cosmos DB, APIM) |
+| `add-project-capability-host.bicep` | Capability host for agent tools |
 
 ## Deployment
 
 ### Prerequisites
 
-1. Azure CLI installed and authenticated
-2. Owner or Contributor role on the subscription
-3. Sufficient quota for model deployment (gpt-4o-mini)
+1. Azure CLI installed and authenticated (`az login`)
+2. Bicep CLI installed (`az bicep install`)
+3. Owner or Contributor role on the subscription
+4. Sufficient quota for model deployments
 
-### Deploy
+### Basic Deploy (Private Foundry)
 
 ```bash
-# Create resource group
-az group create --name "rg-hybrid-agent-test" --location "westus2"
+az group create --name "rg-hybrid-agent-test" --location "eastus2"
 
-# Deploy the template
 az deployment group create \
   --resource-group "rg-hybrid-agent-test" \
   --template-file main.bicep \
-  --parameters location="westus2"
+  --parameters location="eastus2"
 ```
 
-### Deploy with APIM
-
-To provision a new API Management instance alongside the agent setup:
+### Deploy with APIM AI Gateway
 
 ```bash
+# Provision new APIM with gateway connection
 az deployment group create \
   --resource-group "rg-hybrid-agent-test" \
   --template-file main.bicep \
-  --parameters location="westus2" deployApiManagement=true publisherEmail="admin@yourorg.com" publisherName="YourOrg"
+  --parameters location="eastus2" \
+    deployApiManagement=true \
+    publisherEmail="admin@yourorg.com" \
+    publisherName="YourOrg"
 ```
 
-To use an existing APIM instance:
-
 ```bash
+# Use an existing APIM instance
 az deployment group create \
   --resource-group "rg-hybrid-agent-test" \
   --template-file main.bicep \
-  --parameters location="westus2" apiManagementResourceId="/subscriptions/{sub}/resourceGroups/{rg}/providers/Microsoft.ApiManagement/service/{name}"
+  --parameters location="eastus2" \
+    apiManagementResourceId="/subscriptions/{sub}/resourceGroups/{rg}/providers/Microsoft.ApiManagement/service/{name}"
 ```
 
 > **Note:** Only `StandardV2` and `PremiumV2` APIM SKUs support private endpoints. The default is `StandardV2`.
 
+### Deploy with Cross-Region OpenAI
+
+```bash
+az deployment group create \
+  --resource-group "rg-hybrid-agent-test" \
+  --template-file main.bicep \
+  --parameters location="eastus2" \
+    deployApiManagement=true \
+    publisherEmail="admin@yourorg.com" \
+    deployCrossRegionOpenAI=true \
+    crossRegionLocation="westus" \
+    crossRegionModelName="gpt-4o"
+```
+
+### Deploy with Bastion + Jump Box
+
+```bash
+az deployment group create \
+  --resource-group "rg-hybrid-agent-test" \
+  --template-file main.bicep \
+  --parameters location="eastus2" \
+    deployBastion=true \
+    jumpboxAdminPassword="YourSecurePassword123!"
+```
+
+Then connect via Azure Portal → VM → Connect → Bastion.
+
+### Full Deploy (All Features)
+
+```bash
+az deployment group create \
+  --resource-group "rg-hybrid-agent-test" \
+  --template-file main.bicep \
+  --parameters location="eastus2" \
+    deployApiManagement=true \
+    publisherEmail="admin@yourorg.com" \
+    deployCrossRegionOpenAI=true \
+    crossRegionLocation="westus" \
+    deployApplicationInsights=true \
+    deployBastion=true \
+    jumpboxAdminPassword="YourSecurePassword123!"
+```
+
 ### Verify Deployment
 
 ```bash
-# Check deployment status
 az deployment group show \
   --resource-group "rg-hybrid-agent-test" \
   --name "main" \
   --query "properties.provisioningState"
 
-# List private endpoints (should see AI Search, Storage, Cosmos DB)
 az network private-endpoint list \
   --resource-group "rg-hybrid-agent-test" \
   --output table
 ```
 
-## Testing Agents with Private Resources
+## APIM AI Gateway
 
-### Option 1: Portal Testing
+When APIM is deployed, the template automatically:
+1. Creates APIM (StandardV2) with outbound VNet integration
+2. Imports the Azure OpenAI inference API into APIM
+3. Adds managed identity authentication policy (`authentication-managed-identity`)
+4. Creates an `ApiManagement` gateway connection on the project with static model metadata
+5. Configures private endpoint + DNS for secure inbound access
 
-If the Foundry resource has **public network access enabled**, you can test directly in the portal:
+Agents route requests through the gateway using the model name format `<connection-name>/<model-name>`:
 
-1. Navigate to [Azure AI Foundry portal](https://ai.azure.com)
-2. Select your project
-3. Create an agent with AI Search tool
-4. Test that the agent can query the private AI Search index
+```python
+from azure.ai.projects.models import PromptAgentDefinition
 
-If the Foundry resource has **public network access disabled** (default), you need to connect via VPN Gateway, ExpressRoute, or Azure Bastion before accessing the portal. See [Connecting to a Private Foundry Resource](#connecting-to-a-private-foundry-resource).
+# Local model (eastus2) via APIM
+agent = client.agents.create_version(
+    agent_name="my-agent",
+    definition=PromptAgentDefinition(
+        model="apim-gateway/gpt-4o-mini",
+        instructions="You are a helpful assistant.",
+    ),
+)
 
-### Option 2: SDK Testing
+# Cross-region model (westus) via APIM
+agent = client.agents.create_version(
+    agent_name="cross-region-agent",
+    definition=PromptAgentDefinition(
+        model="apim-gateway-crossregion/gpt-4o",
+        instructions="You are a helpful assistant.",
+    ),
+)
+```
 
-See [tests/TESTING-GUIDE.md](tests/TESTING-GUIDE.md) for detailed SDK testing instructions.
+For more details, see:
+- [AI Gateway docs](https://learn.microsoft.com/en-us/azure/foundry/agents/how-to/ai-gateway)
+- [APIM Integration Guide](https://github.com/azure-ai-foundry/foundry-samples/blob/main/infrastructure/infrastructure-setup-bicep/01-connections/apim-and-modelgateway-integration-guide.md)
+
+## Cross-Region OpenAI
+
+When `deployCrossRegionOpenAI=true`, the template creates:
+1. Azure OpenAI resource in the specified region (e.g., `westus`) with a model deployment
+2. Private endpoint in the primary VNet for secure cross-region connectivity
+3. DNS registration in `privatelink.openai.azure.com` for name resolution
+4. APIM API pointing to the cross-region backend with managed identity auth
+5. APIM gateway connection on the project (`apim-gateway-crossregion/<model>`)
+
+This enables agents in the primary region to use models deployed in other regions, routed securely via the APIM gateway and Azure backbone private links.
+
+## Observability
+
+Application Insights is deployed by default (`deployApplicationInsights=true`), providing:
+- **Agent traces** — `invoke_agent` and `chat` metrics in `AppDependencies` table
+- **Latency tracking** — per-call duration for agent invocations and model calls
+- **Foundry portal tracing** — visible at [ai.azure.com](https://ai.azure.com) → project → Tracing
+
+Query traces via Log Analytics:
+```kql
+AppDependencies
+| where TimeGenerated > ago(1h)
+| project TimeGenerated, Name, DurationMs, Success
+| order by TimeGenerated desc
+```
+
+## Testing
+
+### SDK Testing
+
+```bash
+export PROJECT_ENDPOINT="https://<ai-services>.services.ai.azure.com/api/projects/<project>"
+
+# Test basic agent
+python tests/test_agents_v2.py
+
+# Test APIM gateway agent
+python tests/test_apim_gateway_agents_v2.py
+
+# Test AI Search tool
+python tests/test_ai_search_tool_agents_v2.py
+
+# Test MCP tools
+python tests/test_mcp_tools_agents_v2.py
+```
+
+See [tests/TESTING-GUIDE.md](tests/TESTING-GUIDE.md) for detailed instructions.
+
+### Portal Testing
+
+If public access is enabled, test directly at [ai.azure.com](https://ai.azure.com). If private (default), connect via Bastion jump box or VPN first.
+
+> **Note:** The Foundry portal backend makes server-to-server API calls that don't route through your VPN. For full portal access to private resources, use the Bastion jump box or temporarily enable public access.
+
+## Switching Between Private and Public Access
+
+In [modules-network-secured/ai-account-identity.bicep](modules-network-secured/ai-account-identity.bicep), change:
+
+```bicep
+// To enable public access:
+publicNetworkAccess: 'Enabled'
+defaultAction: 'Allow'
+
+// To disable public access (default):
+publicNetworkAccess: 'Disabled'
+defaultAction: 'Deny'
+```
+
+## Parameters
+
+| Parameter | Description | Default |
+|-----------|-------------|---------|
+| **Core** | | |
+| `location` | Azure region | `eastus2` |
+| `aiServices` | Base name for AI Services | `aiservices` |
+| `modelName` | Model to deploy | `gpt-4o-mini` |
+| `modelCapacity` | TPM capacity | `30` |
+| **Networking** | | |
+| `vnetName` | VNet name | `agent-vnet-test` |
+| `agentSubnetName` | Subnet for AI Foundry (reserved) | `agent-subnet` |
+| `peSubnetName` | Subnet for private endpoints | `pe-subnet` |
+| `mcpSubnetName` | Subnet for MCP servers | `mcp-subnet` |
+| `existingVnetResourceId` | Use existing VNet (optional) | `''` |
+| **APIM** | | |
+| `deployApiManagement` | Provision APIM | `false` |
+| `apiManagementResourceId` | Existing APIM resource ID | `''` |
+| `apiManagementSku` | APIM SKU (`StandardV2` / `PremiumV2`) | `StandardV2` |
+| `publisherEmail` | APIM publisher email | `apim-admin@contoso.com` |
+| `publisherName` | APIM publisher name | `AI Foundry` |
+| `apimSubnetName` | Subnet for APIM outbound VNet integration | `apim-subnet` |
+| `apimSubnetPrefix` | APIM subnet address prefix | `192.168.3.0/24` |
+| `apimConnectionName` | Name for APIM gateway connection | `apim-gateway` |
+| `apimInferenceApiVersion` | API version for inference calls | `2024-10-21` |
+| `apimModelDeployments` | Static model list for gateway | Uses template model |
+| **Cross-Region** | | |
+| `deployCrossRegionOpenAI` | Deploy OpenAI in different region | `false` |
+| `crossRegionLocation` | Region for cross-region OpenAI | `westus` |
+| `crossRegionModelName` | Cross-region model to deploy | `gpt-4o` |
+| `crossRegionModelVersion` | Cross-region model version | `2024-11-20` |
+| **Observability** | | |
+| `deployApplicationInsights` | Deploy Application Insights | `true` |
+| **Bastion** | | |
+| `deployBastion` | Deploy Bastion + jump box VM | `false` |
+| `bastionSubnetPrefix` | AzureBastionSubnet address prefix | `192.168.4.0/26` |
+| `jumpboxAdminPassword` | Jump box admin password | (required if deployed) |
 
 ## MCP Server Deployment
 
-To deploy MCP servers on the private VNet:
-
 ```bash
-# Create Container Apps environment on mcp-subnet
 az containerapp env create \
   --resource-group "rg-hybrid-agent-test" \
   --name "mcp-env" \
-  --location "westus2" \
+  --location "eastus2" \
   --infrastructure-subnet-resource-id "<mcp-subnet-resource-id>" \
   --internal-only true
 
-# Deploy MCP server
 az containerapp create \
   --resource-group "rg-hybrid-agent-test" \
   --name "my-mcp-server" \
@@ -198,72 +339,16 @@ az containerapp create \
   --min-replicas 1
 ```
 
-Then configure private DNS zone for Container Apps (see TESTING-GUIDE.md Step 6.3).
-
-## Parameters
-
-| Parameter | Description | Default |
-|-----------|-------------|---------|
-| `location` | Azure region | `eastus2` |
-| `aiServices` | Base name for AI Services | `aiservices` |
-| `modelName` | Model to deploy | `gpt-4o-mini` |
-| `modelCapacity` | TPM capacity | `30` |
-| `vnetName` | VNet name | `agent-vnet-test` |
-| `agentSubnetName` | Subnet for AI Foundry (reserved) | `agent-subnet` |
-| `peSubnetName` | Subnet for private endpoints | `pe-subnet` |
-| `mcpSubnetName` | Subnet for MCP servers | `mcp-subnet` |
-| `apiManagementResourceId` | Existing APIM resource ID (optional) | `''` |
-| `deployApiManagement` | Set to true to provision APIM | `false` |
-| `apiManagementSku` | APIM SKU (`StandardV2` or `PremiumV2`) | `StandardV2` |
-| `publisherEmail` | APIM publisher email | `apim-admin@contoso.com` |
-| `publisherName` | APIM publisher name | `AI Foundry` |
-| `apimSubnetName` | Subnet for APIM outbound VNet integration | `apim-subnet` |
-| `apimSubnetPrefix` | Address prefix for APIM subnet | `192.168.3.0/24` |
-| `apimConnectionName` | Name for the APIM gateway connection | `apim-gateway` |
-| `apimInferenceApiVersion` | API version for inference calls | `2024-10-21` |
-| `apimModelDeployments` | Static model list for the gateway | Uses template model |
-| `deployApplicationInsights` | Deploy Application Insights for tracing | `true` |
-| `deployBastion` | Deploy Bastion + jump box VM | `false` |
-| `bastionSubnetPrefix` | Address prefix for AzureBastionSubnet | `192.168.4.0/26` |
-| `jumpboxAdminPassword` | Admin password for jump box VM | (required if Bastion deployed) |
-| `deployCrossRegionOpenAI` | Deploy Azure OpenAI in a different region | `false` |
-| `crossRegionLocation` | Region for cross-region OpenAI | `westus` |
-| `crossRegionModelName` | Model to deploy cross-region | `gpt-4o` |
-
-## APIM AI Gateway
-
-When APIM is deployed (`deployApiManagement=true`) or an existing APIM is provided (`apiManagementResourceId`), the template automatically:
-1. Imports the Azure OpenAI inference API into APIM
-2. Creates an `ApiManagement` gateway connection on the project with static model metadata
-3. Configures private endpoint + DNS for secure inbound access
-4. Sets up outbound VNet integration for backend connectivity
-
-After deployment, agents can route requests through the APIM gateway using model name format `<connection-name>/<model-name>`:
-
-```python
-# Example: Use APIM gateway model in an agent
-FOUNDRY_MODEL_DEPLOYMENT_NAME = "apim-gateway/gpt-4o-mini"
-```
-
-For testing, see `tests/test_apim_gateway_agents_v2.py`:
-```bash
-export PROJECT_ENDPOINT="https://<ai-services>.services.ai.azure.com/api/projects/<project>"
-python tests/test_apim_gateway_agents_v2.py
-```
-
-For more details, see:
-- [AI Gateway docs](https://learn.microsoft.com/en-us/azure/foundry/agents/how-to/ai-gateway)
-- [APIM Integration Guide](https://github.com/azure-ai-foundry/foundry-samples/blob/main/infrastructure/infrastructure-setup-bicep/01-connections/apim-and-modelgateway-integration-guide.md)
-
 ## Cleanup
 
 ```bash
-# Delete all resources
 az group delete --name "rg-hybrid-agent-test" --yes --no-wait
 ```
 
 ## Related Templates
 
-- [15-private-network-standard-agent-setup](../15-private-network-standard-agent-setup/) - Fully private setup (no public access)
-- [40-basic-agent-setup](../40-basic-agent-setup/) - Basic agent setup without private networking
-- [41-standard-agent-setup](../41-standard-agent-setup/) - Standard agent setup without private networking
+- [15-private-network-standard-agent-setup](../15-private-network-standard-agent-setup/) — Fully private setup (managed VNet)
+- [16-private-network-standard-agent-apim-setup-preview](../16-private-network-standard-agent-apim-setup-preview/) — Private APIM setup (reference)
+- [40-basic-agent-setup](../40-basic-agent-setup/) — Basic agent setup without private networking
+- [41-standard-agent-setup](../41-standard-agent-setup/) — Standard agent setup without private networking
+- [01-connections](../01-connections/) — Connection templates (APIM, ModelGateway, OpenAI, etc.)
