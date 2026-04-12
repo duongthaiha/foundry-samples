@@ -43,6 +43,15 @@ param deployCrossRegionOpenAI = false
 param crossRegionLocation = 'westus'
 param crossRegionModelName = 'gpt-4o'
 
+// Workflow deployment
+param deployWorkflow = false
+
+// Teams publishing
+param deployTeamsPublishing = false
+param teamsCustomDomain = ''
+param teamsAgentName = 'marketing-pipeline'
+param teamsApplicationName = 'marketing-pipeline-teams'
+
 // Pass the DNS zone map here
 // Leave empty to create new DNS zone, add the resource group of existing DNS zone to use it
 param existingDnsZones = {

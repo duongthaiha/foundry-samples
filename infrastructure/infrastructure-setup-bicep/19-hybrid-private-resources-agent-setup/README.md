@@ -312,6 +312,15 @@ defaultAction: 'Deny'
 | `crossRegionLocation` | Region for cross-region OpenAI | `westus` |
 | `crossRegionModelName` | Cross-region model to deploy | `gpt-4o` |
 | `crossRegionModelVersion` | Cross-region model version | `2024-11-20` |
+| **Workflow** | | |
+| `deployWorkflow` | Deploy marketing pipeline workflow | `false` |
+| **Teams Publishing** | | |
+| `deployTeamsPublishing` | Deploy Teams publishing infrastructure | `false` |
+| `teamsCustomDomain` | Custom domain for Bot endpoint | (required if deployed) |
+| `teamsAgentName` | Agent to publish to Teams | `marketing-pipeline` |
+| `teamsApplicationName` | Teams Agent Application name | `marketing-pipeline-teams` |
+| `appGwSubnetPrefix` | Application Gateway subnet prefix | `192.168.5.0/24` |
+| `crossRegionModelVersion` | Cross-region model version | `2024-11-20` |
 | **Observability** | | |
 | `deployApplicationInsights` | Deploy Application Insights | `true` |
 | **Bastion** | | |
@@ -338,6 +347,24 @@ az containerapp create \
   --ingress external \
   --min-replicas 1
 ```
+
+## Publishing to Microsoft Teams
+
+For publishing agents to Teams while keeping the agent on a private network, see **[PUBLISH.md](PUBLISH.md)** for the complete step-by-step guide.
+
+Deploy with Teams publishing:
+```bash
+az deployment group create \
+  --resource-group "rg-hybrid-agent-test" \
+  --template-file main.bicep \
+  --parameters \
+    deployApiManagement=true \
+    deployTeamsPublishing=true \
+    teamsCustomDomain="agent.yourcompany.com" \
+    deployWorkflow=true
+```
+
+This creates Application Gateway (WAF v2), Bot Service, Teams Channel, and APIM JWT validation — all keeping the agent private.
 
 ## Cleanup
 

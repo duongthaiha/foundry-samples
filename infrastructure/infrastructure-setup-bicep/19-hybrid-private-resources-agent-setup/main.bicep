@@ -177,6 +177,24 @@ param crossRegionModelName string = 'gpt-4o'
 @description('Model version for the cross-region deployment')
 param crossRegionModelVersion string = '2024-11-20'
 
+@description('Set to true to deploy the marketing pipeline workflow with published application.')
+param deployWorkflow bool = false
+
+@description('Set to true to deploy Teams publishing infrastructure (App Gateway, Bot Service, Teams Channel).')
+param deployTeamsPublishing bool = false
+
+@description('Custom domain for the Bot messaging endpoint (e.g., agent.yourcompany.com). Required when deployTeamsPublishing is true.')
+param teamsCustomDomain string = ''
+
+@description('Name of the agent to publish to Teams')
+param teamsAgentName string = 'marketing-pipeline'
+
+@description('Name for the Teams Agent Application')
+param teamsApplicationName string = 'marketing-pipeline-teams'
+
+@description('Address prefix for the Application Gateway subnet')
+param appGwSubnetPrefix string = '192.168.5.0/24'
+
 //New Param for resource group of Private DNS zones
 //@description('Optional: Resource group containing existing private DNS zones. If specified, DNS zones will not be created.')
 //param existingDnsZonesResourceGroup string = ''
@@ -631,6 +649,59 @@ module crossRegionOpenAI 'modules-network-secured/cross-region-openai-connection
     aiProject
     apimDependencies
     addProjectCapabilityHost
+    privateEndpointAndDNS
+  ]
+}
+
+// Deploy marketing pipeline workflow with published application
+var workflowAgentModel = deployApiManagement ? 'apim-gateway/${modelName}' : modelName
+module workflowDeployment 'modules-network-secured/workflow-deployment.bicep' = if (deployWorkflow) {
+  name: 'workflow-${uniqueSuffix}-deployment'
+  params: {
+    location: location
+    accountName: aiAccount.outputs.accountName
+    projectName: aiProject.outputs.projectName
+    agentModel: workflowAgentModel
+  }
+  dependsOn: [
+    addProjectCapabilityHost
+    apimGatewayConnection
+  ]
+}
+
+// Deploy Teams publishing infrastructure
+module teamsPublishScript 'modules-network-secured/teams-agent-publish-script.bicep' = if (deployTeamsPublishing) {
+  name: 'teams-publish-${uniqueSuffix}-deployment'
+  params: {
+    location: location
+    accountName: aiAccount.outputs.accountName
+    projectName: aiProject.outputs.projectName
+    agentName: teamsAgentName
+    applicationName: teamsApplicationName
+  }
+  dependsOn: [
+    addProjectCapabilityHost
+    workflowDeployment
+  ]
+}
+
+module teamsInfra 'modules-network-secured/teams-publishing-infra.bicep' = if (deployTeamsPublishing) {
+  name: 'teams-infra-${uniqueSuffix}-deployment'
+  params: {
+    location: location
+    vnetName: vnet.outputs.virtualNetworkName
+    appGwSubnetPrefix: appGwSubnetPrefix
+    apimName: resolvedApiManagementName
+    accountName: aiAccount.outputs.accountName
+    projectName: aiProject.outputs.projectName
+    applicationName: teamsApplicationName
+    customDomain: teamsCustomDomain
+    botClientId: deployTeamsPublishing ? teamsPublishScript.outputs.botClientId : ''
+    activityProtocolUrl: deployTeamsPublishing ? teamsPublishScript.outputs.activityProtocolUrl : ''
+  }
+  dependsOn: [
+    teamsPublishScript
+    apimDependencies
     privateEndpointAndDNS
   ]
 }
