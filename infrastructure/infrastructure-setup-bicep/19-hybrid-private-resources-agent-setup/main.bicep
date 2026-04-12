@@ -698,6 +698,7 @@ module teamsInfra 'modules-network-secured/teams-publishing-infra.bicep' = if (d
     customDomain: teamsCustomDomain
     botClientId: deployTeamsPublishing ? teamsPublishScript.outputs.botClientId : ''
     activityProtocolUrl: deployTeamsPublishing ? teamsPublishScript.outputs.activityProtocolUrl : ''
+    apimPrivateIp: '' // Set to APIM private endpoint IP for fully private deployments
   }
   dependsOn: [
     teamsPublishScript

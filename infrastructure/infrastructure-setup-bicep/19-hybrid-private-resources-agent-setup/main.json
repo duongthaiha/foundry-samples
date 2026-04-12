@@ -5,7 +5,7 @@
     "_generator": {
       "name": "bicep",
       "version": "0.42.1.51946",
-      "templateHash": "4915707538462299917"
+      "templateHash": "17230625645239318157"
     }
   },
   "parameters": {
@@ -4951,7 +4951,10 @@
             "value": "[parameters('teamsCustomDomain')]"
           },
           "botClientId": "[if(parameters('deployTeamsPublishing'), createObject('value', reference(resourceId('Microsoft.Resources/deployments', format('teams-publish-{0}-deployment', variables('uniqueSuffix'))), '2025-04-01').outputs.botClientId.value), createObject('value', ''))]",
-          "activityProtocolUrl": "[if(parameters('deployTeamsPublishing'), createObject('value', reference(resourceId('Microsoft.Resources/deployments', format('teams-publish-{0}-deployment', variables('uniqueSuffix'))), '2025-04-01').outputs.activityProtocolUrl.value), createObject('value', ''))]"
+          "activityProtocolUrl": "[if(parameters('deployTeamsPublishing'), createObject('value', reference(resourceId('Microsoft.Resources/deployments', format('teams-publish-{0}-deployment', variables('uniqueSuffix'))), '2025-04-01').outputs.activityProtocolUrl.value), createObject('value', ''))]",
+          "apimPrivateIp": {
+            "value": ""
+          }
         },
         "template": {
           "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
@@ -4960,7 +4963,7 @@
             "_generator": {
               "name": "bicep",
               "version": "0.42.1.51946",
-              "templateHash": "6951727810652379958"
+              "templateHash": "2427991491079955608"
             }
           },
           "parameters": {
@@ -5038,6 +5041,13 @@
               "defaultValue": "",
               "metadata": {
                 "description": "Bot Tenant ID"
+              }
+            },
+            "apimPrivateIp": {
+              "type": "string",
+              "defaultValue": "",
+              "metadata": {
+                "description": "APIM private endpoint IP address (use private IP instead of FQDN for private APIM)"
               }
             },
             "activityProtocolUrl": {
@@ -5190,6 +5200,24 @@
                   "tier": "WAF_v2",
                   "capacity": 1
                 },
+                "probes": [
+                  {
+                    "name": "apim-health-probe",
+                    "properties": {
+                      "protocol": "Https",
+                      "host": "[format('{0}.azure-api.net', parameters('apimName'))]",
+                      "path": "/status-0123456789abcdef",
+                      "interval": 30,
+                      "timeout": 30,
+                      "unhealthyThreshold": 3,
+                      "match": {
+                        "statusCodes": [
+                          "200-404"
+                        ]
+                      }
+                    }
+                  }
+                ],
                 "gatewayIPConfigurations": [
                   {
                     "name": "appGwIpConfig",
@@ -5223,9 +5251,7 @@
                     "name": "apim-backend",
                     "properties": {
                       "backendAddresses": [
-                        {
-                          "fqdn": "[format('{0}.azure-api.net', parameters('apimName'))]"
-                        }
+                        "[if(not(empty(parameters('apimPrivateIp'))), createObject('ipAddress', parameters('apimPrivateIp')), createObject('fqdn', format('{0}.azure-api.net', parameters('apimName'))))]"
                       ]
                     }
                   }
@@ -5238,7 +5264,11 @@
                       "protocol": "Https",
                       "cookieBasedAffinity": "Disabled",
                       "requestTimeout": 60,
-                      "pickHostNameFromBackendAddress": true
+                      "hostName": "[format('{0}.azure-api.net', parameters('apimName'))]",
+                      "pickHostNameFromBackendAddress": false,
+                      "probe": {
+                        "id": "[resourceId('Microsoft.Network/applicationGateways/probes', variables('appGwName'), 'apim-health-probe')]"
+                      }
                     }
                   }
                 ],
@@ -5339,7 +5369,7 @@
               "name": "[format('{0}/{1}/{2}', parameters('apimName'), 'bot-messaging', 'policy')]",
               "properties": {
                 "format": "xml",
-                "value": "[format('<policies><inbound><validate-jwt header-name=\"Authorization\" require-scheme=\"Bearer\" failed-validation-httpcode=\"401\" failed-validation-error-message=\"Unauthorized - Invalid Bot token\"><openid-config url=\"https://login.botframework.com/v1/.well-known/openidconfiguration\" /><audiences><audience>{0}</audience></audiences><issuers><issuer>https://api.botframework.com</issuer></issuers></validate-jwt><base /></inbound><backend><base /></backend><outbound><base /></outbound><on-error><base /></on-error></policies>', parameters('botClientId'))]"
+                "value": "[format('<policies><inbound><rewrite-uri template=\"/?api-version=2025-11-15-preview\" copy-unmatched-params=\"false\" /><validate-jwt header-name=\"Authorization\" require-scheme=\"Bearer\" failed-validation-httpcode=\"401\" failed-validation-error-message=\"Unauthorized - Invalid Bot token\"><openid-config url=\"https://login.botframework.com/v1/.well-known/openidconfiguration\" /><audiences><audience>{0}</audience></audiences><issuers><issuer>https://api.botframework.com</issuer></issuers></validate-jwt><base /></inbound><backend><base /></backend><outbound><base /></outbound><on-error><base /></on-error></policies>', parameters('botClientId'))]"
               },
               "dependsOn": [
                 "[resourceId('Microsoft.ApiManagement/service/apis', parameters('apimName'), 'bot-messaging')]"

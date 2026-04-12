@@ -1,6 +1,6 @@
 # Hybrid Private Resources Agent Setup
 
-This template deploys an Azure AI Foundry account with backend resources (AI Search, Cosmos DB, Storage) on **private endpoints**, with optional **APIM AI Gateway**, **cross-region OpenAI**, **Application Insights**, and **Azure Bastion** for secure portal access.
+This template deploys an Azure AI Foundry account with backend resources (AI Search, Cosmos DB, Storage) on **private endpoints**, with optional **APIM AI Gateway**, **cross-region OpenAI**, **Application Insights**, **Azure Bastion**, and **Teams publishing** (with Application Gateway + Bot Service).
 
 By default, the Foundry resource has **public network access disabled**, but this can be switched to public access if needed (see [Switching Between Private and Public Access](#switching-between-private-and-public-access)).
 
@@ -73,6 +73,9 @@ See [diagrams/architecture.md](diagrams/architecture.md) for the full Mermaid in
 | `cross-region-openai-connection.bicep` | Cross-region OpenAI + model + APIM API + PE + DNS + gateway connection |
 | `application-insights.bicep` | Log Analytics workspace + Application Insights + Foundry connection |
 | `bastion-jumpbox.bicep` | Azure Bastion + Windows jump box VM + NAT gateway |
+| `teams-publishing-infra.bicep` | App Gateway WAF v2 + APIM Bot API + Bot Service + Teams Channel + Key Vault |
+| `teams-agent-publish-script.bicep` | Deployment script: Agent Application + Deployment for Teams |
+| `workflow-deployment.bicep` | Deployment script: workflow agents + Agent Application |
 | `validate-existing-resources.bicep` | Validates existing resources (AI Search, Storage, Cosmos DB, APIM) |
 | `add-project-capability-host.bicep` | Capability host for agent tools |
 

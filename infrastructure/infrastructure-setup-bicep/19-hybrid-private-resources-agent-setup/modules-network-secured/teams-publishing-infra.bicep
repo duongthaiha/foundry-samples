@@ -55,6 +55,9 @@ param botClientId string
 @description('Bot Tenant ID')
 param botTenantId string = ''
 
+@description('APIM private endpoint IP address (use private IP instead of FQDN for private APIM)')
+param apimPrivateIp string = ''
+
 @description('Foundry Activity Protocol URL for the published application')
 param activityProtocolUrl string
 
@@ -206,6 +209,22 @@ resource appGw 'Microsoft.Network/applicationGateways@2024-05-01' = {
       tier: 'WAF_v2'
       capacity: 1
     }
+    probes: [
+      {
+        name: 'apim-health-probe'
+        properties: {
+          protocol: 'Https'
+          host: '${apimName}.azure-api.net'
+          path: '/status-0123456789abcdef'
+          interval: 30
+          timeout: 30
+          unhealthyThreshold: 3
+          match: {
+            statusCodes: [ '200-404' ]
+          }
+        }
+      }
+    ]
     gatewayIPConfigurations: [
       {
         name: 'appGwIpConfig'
@@ -239,7 +258,10 @@ resource appGw 'Microsoft.Network/applicationGateways@2024-05-01' = {
         name: 'apim-backend'
         properties: {
           backendAddresses: [
-            {
+            // Use APIM private IP if available, otherwise FQDN
+            !empty(apimPrivateIp) ? {
+              ipAddress: apimPrivateIp
+            } : {
               fqdn: '${apimName}.azure-api.net'
             }
           ]
@@ -254,7 +276,11 @@ resource appGw 'Microsoft.Network/applicationGateways@2024-05-01' = {
           protocol: 'Https'
           cookieBasedAffinity: 'Disabled'
           requestTimeout: 60
-          pickHostNameFromBackendAddress: true
+          hostName: '${apimName}.azure-api.net'
+          pickHostNameFromBackendAddress: false
+          probe: {
+            id: resourceId('Microsoft.Network/applicationGateways/probes', appGwName, 'apim-health-probe')
+          }
         }
       }
     ]
@@ -346,13 +372,13 @@ resource botMessagingOperation 'Microsoft.ApiManagement/service/apis/operations@
   }
 }
 
-// JWT validation policy — validates Microsoft Bot Framework tokens
+// APIM policy: rewrite URI to append api-version, validate Bot JWT
 resource botMessagingPolicy 'Microsoft.ApiManagement/service/apis/policies@2024-05-01' = {
   name: 'policy'
   parent: botMessagingApi
   properties: {
     format: 'xml'
-    value: '<policies><inbound><validate-jwt header-name="Authorization" require-scheme="Bearer" failed-validation-httpcode="401" failed-validation-error-message="Unauthorized - Invalid Bot token"><openid-config url="https://login.botframework.com/v1/.well-known/openidconfiguration" /><audiences><audience>${botClientId}</audience></audiences><issuers><issuer>https://api.botframework.com</issuer></issuers></validate-jwt><base /></inbound><backend><base /></backend><outbound><base /></outbound><on-error><base /></on-error></policies>'
+    value: '<policies><inbound><rewrite-uri template="/?api-version=2025-11-15-preview" copy-unmatched-params="false" /><validate-jwt header-name="Authorization" require-scheme="Bearer" failed-validation-httpcode="401" failed-validation-error-message="Unauthorized - Invalid Bot token"><openid-config url="https://login.botframework.com/v1/.well-known/openidconfiguration" /><audiences><audience>${botClientId}</audience></audiences><issuers><issuer>https://api.botframework.com</issuer></issuers></validate-jwt><base /></inbound><backend><base /></backend><outbound><base /></outbound><on-error><base /></on-error></policies>'
   }
 }
 

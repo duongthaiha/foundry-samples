@@ -219,10 +219,47 @@ zip -j teams-app.zip manifest.json outline.png color.png
 | Issue | Cause | Resolution |
 |-------|-------|------------|
 | Agent doesn't respond in Teams | Bot endpoint unreachable | Verify DNS A record + App Gateway + APIM connectivity |
-| 401 errors in APIM | JWT validation failing | Check Bot Client ID matches in APIM policy |
+| 400 Bad Request from Foundry | Missing api-version query param | Ensure APIM rewrite-uri policy appends `?api-version=2025-11-15-preview` |
+| App Gateway backend unhealthy | APIM FQDN resolves to public IP | Use APIM private endpoint IP in backend pool instead of FQDN |
+| TLS handshake failure | Certificate name mismatch | Ensure Key Vault cert matches custom domain; update App Gateway SSL cert to latest version |
+| 401 errors in APIM | JWT validation failing | Check Bot Client ID matches in APIM policy audiences |
+| 404 from APIM | Path mismatch | Ensure bot-messaging API has `POST /*` operation with rewrite-uri policy |
+| Channel Adapter stops retrying | Backed off after repeated failures | Uninstall and re-add bot in Teams to reset connection |
 | Agent responds in Foundry but not Teams | Outbound blocked | Ensure firewall allows outbound to `smba.trafficmanager.net`, `login.microsoftonline.com`, `login.botframework.com` |
-| TLS errors | Certificate mismatch | Verify cert in Key Vault matches custom domain |
-| Silent failures (messages received, no reply) | Outbound blocked silently | Check firewall logs for dropped connections to `smba.trafficmanager.net` |
+| Silent failures (messages arrive, no reply) | Outbound blocked silently | Check firewall logs for dropped connections to `smba.trafficmanager.net` |
+| Login screen shown in Teams | Authentication flow working | The bot is connecting — user needs to authenticate via Entra ID |
+
+### Key Debugging Commands
+
+```bash
+# Check App Gateway backend health
+az network application-gateway show-backend-health \
+  --name <appgw-name> --resource-group <rg> \
+  --query "backendAddressPools[0].backendHttpSettingsCollection[0].servers[0].{health:health,log:healthProbeLog}"
+
+# Check APIM response codes (last 5 min)
+az monitor metrics list \
+  --resource <apim-resource-id> --metric "Requests" --interval PT1M \
+  --dimension "GatewayResponseCode" -o table
+
+# Test endpoint TLS from outside
+curl -v https://agent.belugaconsultant.co.uk/bot
+
+# Test Activity Protocol directly (with VPN)
+curl -X POST "https://<foundry>.services.ai.azure.com/.../protocols/activityprotocol?api-version=2025-11-15-preview" \
+  -H "Authorization: Bearer <token>" -H "Content-Type: application/json" \
+  -d '{"type":"message","text":"test"}'
+```
+
+### Fixes Applied During Deployment (Captured in IaC)
+
+These issues were discovered during live deployment and are now fixed in the Bicep templates:
+
+1. **App Gateway backend** — Uses APIM private IP (not FQDN) to avoid public DNS resolution when APIM has `publicNetworkAccess: Disabled`
+2. **Custom health probe** — Accepts 200-404 status codes (APIM returns 404 on probe path)
+3. **Backend HTTP settings** — Sets explicit `hostName` for SNI instead of `pickHostNameFromBackendAddress`
+4. **APIM rewrite-uri** — Appends `?api-version=2025-11-15-preview` required by Foundry Activity Protocol
+5. **JWT + rewrite** — Combined `rewrite-uri` and `validate-jwt` in single inbound policy
 
 ## Firewall Rules
 

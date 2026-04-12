@@ -163,13 +163,14 @@ sequenceDiagram
     Teams->>+Channel: Send chat message
     Channel->>Channel: Acquire JWT token<br/>(iss: api.botframework.com<br/>aud: Bot Client ID)
 
-    Channel->>+AppGW: POST https://agent.yourcompany.com/bot<br/>Authorization: Bearer {JWT}
-    Note over AppGW: TLS termination<br/>with custom certificate<br/>WAF inspection
+    Channel->>+AppGW: POST https://agent.belugaconsultant.co.uk/bot<br/>Authorization: Bearer {JWT}
+    Note over AppGW: TLS termination<br/>(Let's Encrypt cert)<br/>WAF inspection
 
-    AppGW->>+APIM: Forward to APIM backend
-    APIM->>APIM: validate-jwt policy:<br/>✓ Signature (Microsoft keys)<br/>✓ Issuer = api.botframework.com<br/>✓ Audience = Bot Client ID<br/>✓ Token not expired
+    AppGW->>+APIM: Forward to APIM private IP<br/>(192.168.1.x, SNI: apim.azure-api.net)
+    APIM->>APIM: rewrite-uri:<br/>append ?api-version=2025-11-15-preview
+    APIM->>APIM: validate-jwt:<br/>✓ Signature (Microsoft keys)<br/>✓ Issuer = api.botframework.com<br/>✓ Audience = Bot Client ID
 
-    APIM->>+PE: Forward to Activity Protocol URL<br/>(private endpoint)
+    APIM->>+PE: Forward to Activity Protocol URL<br/>+ ?api-version query param<br/>(via VNet to private endpoint)
     PE->>+Agent: Deliver message<br/>(private link)
 
     Agent->>LLM: Process with model<br/>(via APIM gateway)
