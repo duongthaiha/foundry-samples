@@ -5,7 +5,7 @@
     "_generator": {
       "name": "bicep",
       "version": "0.42.1.51946",
-      "templateHash": "16129139177607027313"
+      "templateHash": "12290388783103452707"
     }
   },
   "parameters": {
@@ -337,6 +337,48 @@
         "description": "Model version for the cross-region deployment"
       }
     },
+    "deployWorkflow": {
+      "type": "bool",
+      "defaultValue": false,
+      "metadata": {
+        "description": "Set to true to deploy the marketing pipeline workflow with published application."
+      }
+    },
+    "deployTeamsPublishing": {
+      "type": "bool",
+      "defaultValue": false,
+      "metadata": {
+        "description": "Set to true to deploy Teams publishing infrastructure (App Gateway, Bot Service, Teams Channel)."
+      }
+    },
+    "teamsCustomDomain": {
+      "type": "string",
+      "defaultValue": "",
+      "metadata": {
+        "description": "Custom domain for the Bot messaging endpoint (e.g., agent.yourcompany.com). Required when deployTeamsPublishing is true."
+      }
+    },
+    "teamsAgentName": {
+      "type": "string",
+      "defaultValue": "marketing-pipeline",
+      "metadata": {
+        "description": "Name of the agent to publish to Teams"
+      }
+    },
+    "teamsApplicationName": {
+      "type": "string",
+      "defaultValue": "marketing-pipeline-teams",
+      "metadata": {
+        "description": "Name for the Teams Agent Application"
+      }
+    },
+    "appGwSubnetPrefix": {
+      "type": "string",
+      "defaultValue": "192.168.5.0/24",
+      "metadata": {
+        "description": "Address prefix for the Application Gateway subnet"
+      }
+    },
     "existingDnsZones": {
       "type": "object",
       "defaultValue": {
@@ -420,7 +462,8 @@
         }
       }
     ],
-    "resolvedModelDeployments": "[if(greater(length(parameters('apimModelDeployments')), 0), parameters('apimModelDeployments'), variables('defaultModelDeployments'))]"
+    "resolvedModelDeployments": "[if(greater(length(parameters('apimModelDeployments')), 0), parameters('apimModelDeployments'), variables('defaultModelDeployments'))]",
+    "workflowAgentModel": "[if(parameters('deployApiManagement'), format('apim-gateway/{0}', parameters('modelName')), parameters('modelName'))]"
   },
   "resources": [
     {
@@ -4470,6 +4513,842 @@
         "[resourceId('Microsoft.Resources/deployments', format('{0}-{1}-deployment', variables('projectName'), variables('uniqueSuffix')))]",
         "[resourceId('Microsoft.Resources/deployments', format('apim-{0}-deployment', variables('uniqueSuffix')))]",
         "[resourceId('Microsoft.Resources/deployments', format('{0}-private-endpoint', variables('uniqueSuffix')))]",
+        "[resourceId('Microsoft.Resources/deployments', format('validate-existing-resources-{0}-deployment', variables('uniqueSuffix')))]",
+        "[resourceId('Microsoft.Resources/deployments', format('vnet-{0}-{1}-deployment', variables('trimVnetName'), variables('uniqueSuffix')))]"
+      ]
+    },
+    {
+      "condition": "[parameters('deployWorkflow')]",
+      "type": "Microsoft.Resources/deployments",
+      "apiVersion": "2025-04-01",
+      "name": "[format('workflow-{0}-deployment', variables('uniqueSuffix'))]",
+      "properties": {
+        "expressionEvaluationOptions": {
+          "scope": "inner"
+        },
+        "mode": "Incremental",
+        "parameters": {
+          "location": {
+            "value": "[parameters('location')]"
+          },
+          "accountName": {
+            "value": "[reference(resourceId('Microsoft.Resources/deployments', format('{0}-{1}-deployment', variables('accountName'), variables('uniqueSuffix'))), '2025-04-01').outputs.accountName.value]"
+          },
+          "projectName": {
+            "value": "[reference(resourceId('Microsoft.Resources/deployments', format('{0}-{1}-deployment', variables('projectName'), variables('uniqueSuffix'))), '2025-04-01').outputs.projectName.value]"
+          },
+          "agentModel": {
+            "value": "[variables('workflowAgentModel')]"
+          }
+        },
+        "template": {
+          "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+          "contentVersion": "1.0.0.0",
+          "metadata": {
+            "_generator": {
+              "name": "bicep",
+              "version": "0.42.1.51946",
+              "templateHash": "10874869081676968900"
+            }
+          },
+          "parameters": {
+            "location": {
+              "type": "string",
+              "metadata": {
+                "description": "Azure region"
+              }
+            },
+            "accountName": {
+              "type": "string",
+              "metadata": {
+                "description": "Name of the AI Foundry account"
+              }
+            },
+            "projectName": {
+              "type": "string",
+              "metadata": {
+                "description": "Name of the project"
+              }
+            },
+            "agentModel": {
+              "type": "string",
+              "metadata": {
+                "description": "Model to use for the agents (e.g., apim-gateway/gpt-4o-mini or gpt-4o-mini)"
+              }
+            },
+            "workflowName": {
+              "type": "string",
+              "defaultValue": "marketing-pipeline",
+              "metadata": {
+                "description": "Name for the workflow"
+              }
+            },
+            "applicationName": {
+              "type": "string",
+              "defaultValue": "marketing-pipeline-app",
+              "metadata": {
+                "description": "Name for the published application"
+              }
+            },
+            "deploymentName": {
+              "type": "string",
+              "defaultValue": "marketing-pipeline-deployment",
+              "metadata": {
+                "description": "Name for the deployment"
+              }
+            }
+          },
+          "resources": [
+            {
+              "type": "Microsoft.ManagedIdentity/userAssignedIdentities",
+              "apiVersion": "2023-01-31",
+              "name": "[format('{0}-script-identity', parameters('workflowName'))]",
+              "location": "[parameters('location')]"
+            },
+            {
+              "type": "Microsoft.Authorization/roleAssignments",
+              "apiVersion": "2022-04-01",
+              "scope": "[resourceId('Microsoft.CognitiveServices/accounts', parameters('accountName'))]",
+              "name": "[guid(resourceId('Microsoft.CognitiveServices/accounts', parameters('accountName')), resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', format('{0}-script-identity', parameters('workflowName'))), 'a]97b-65b7-4e0b-9910-1c2e2f5e5e5e')]",
+              "properties": {
+                "principalId": "[reference(resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', format('{0}-script-identity', parameters('workflowName'))), '2023-01-31').principalId]",
+                "principalType": "ServicePrincipal",
+                "roleDefinitionId": "[subscriptionResourceId('Microsoft.Authorization/roleDefinitions', '64702f94-c441-49e6-a78b-ef80e0188fee')]"
+              },
+              "dependsOn": [
+                "[resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', format('{0}-script-identity', parameters('workflowName')))]"
+              ]
+            },
+            {
+              "type": "Microsoft.Authorization/roleAssignments",
+              "apiVersion": "2022-04-01",
+              "name": "[guid(resourceGroup().id, resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', format('{0}-script-identity', parameters('workflowName'))), 'contributor-workflow')]",
+              "properties": {
+                "principalId": "[reference(resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', format('{0}-script-identity', parameters('workflowName'))), '2023-01-31').principalId]",
+                "principalType": "ServicePrincipal",
+                "roleDefinitionId": "[subscriptionResourceId('Microsoft.Authorization/roleDefinitions', 'b24988ac-6180-42a0-ab88-20f7382dd24c')]"
+              },
+              "dependsOn": [
+                "[resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', format('{0}-script-identity', parameters('workflowName')))]"
+              ]
+            },
+            {
+              "type": "Microsoft.Resources/deploymentScripts",
+              "apiVersion": "2023-08-01",
+              "name": "[format('{0}-deploy-script', parameters('workflowName'))]",
+              "location": "[parameters('location')]",
+              "kind": "AzurePowerShell",
+              "identity": {
+                "type": "UserAssigned",
+                "userAssignedIdentities": {
+                  "[format('{0}', resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', format('{0}-script-identity', parameters('workflowName'))))]": {}
+                }
+              },
+              "properties": {
+                "azPowerShellVersion": "12.0",
+                "retentionInterval": "PT1H",
+                "timeout": "PT10M",
+                "environmentVariables": [
+                  {
+                    "name": "ACCOUNT_NAME",
+                    "value": "[parameters('accountName')]"
+                  },
+                  {
+                    "name": "PROJECT_NAME",
+                    "value": "[parameters('projectName')]"
+                  },
+                  {
+                    "name": "AGENT_MODEL",
+                    "value": "[parameters('agentModel')]"
+                  },
+                  {
+                    "name": "WORKFLOW_NAME",
+                    "value": "[parameters('workflowName')]"
+                  },
+                  {
+                    "name": "APP_NAME",
+                    "value": "[parameters('applicationName')]"
+                  },
+                  {
+                    "name": "DEPLOY_NAME",
+                    "value": "[parameters('deploymentName')]"
+                  },
+                  {
+                    "name": "SUBSCRIPTION_ID",
+                    "value": "[subscription().subscriptionId]"
+                  },
+                  {
+                    "name": "RESOURCE_GROUP",
+                    "value": "[resourceGroup().name]"
+                  }
+                ],
+                "scriptContent": "      $ErrorActionPreference = 'Stop'\n\n      # Get token for Foundry API\n      $token = (Get-AzAccessToken -ResourceUrl \"https://ai.azure.com\").Token\n      $headers = @{\n        \"Authorization\" = \"Bearer $token\"\n        \"Content-Type\" = \"application/json\"\n      }\n      $baseUrl = \"https://$($env:ACCOUNT_NAME).services.ai.azure.com/api/projects/$($env:PROJECT_NAME)\"\n\n      # Create the 3 prompt agents\n      $agents = @(\n        @{\n          name = \"marketing-analyst\"\n          instructions = \"You are a marketing analyst. Given a product description, identify: 1. Key features 2. Target audience 3. Unique selling points. Output as a structured list.\"\n        },\n        @{\n          name = \"marketing-copywriter\"\n          instructions = \"You are a marketing copywriter. Given text describing features, audience, and USPs, compose compelling ~150 word marketing copy. Output just the copy as a single text block.\"\n        },\n        @{\n          name = \"marketing-editor\"\n          instructions = \"You are an editor. Given draft copy, correct grammar, improve clarity, ensure consistent tone, format properly and make it polished. Output the final copy as a single text block.\"\n        }\n      )\n\n      foreach ($agent in $agents) {\n        $body = @{\n          definition = @{\n            kind = \"prompt\"\n            model = $env:AGENT_MODEL\n            instructions = $agent.instructions\n          }\n        } | ConvertTo-Json -Depth 5\n        $uri = \"$baseUrl/agents/$($agent.name)/versions?api-version=v1\"\n        Invoke-RestMethod -Uri $uri -Method Post -Headers $headers -Body $body\n        Write-Host \"Created agent: $($agent.name)\"\n      }\n\n      # Create the workflow agent\n      $workflowYaml = @\"\nkind: workflow\nname: $($env:WORKFLOW_NAME)\ntrigger:\n  kind: OnConversationStart\n  id: trigger_wf\n  actions:\n    - kind: InvokeAzureAgent\n      id: analyst\n      agent:\n        name: marketing-analyst\n      description: Analyze product features, audience, and USPs\n      conversationId: =System.ConversationId\n      input:\n        messages: =System.LastMessage\n      output:\n        messages: Local.LatestMessage\n        autoSend: true\n    - kind: InvokeAzureAgent\n      id: copywriter\n      agent:\n        name: marketing-copywriter\n      description: Write compelling marketing copy from analysis\n      conversationId: =System.ConversationId\n      input:\n        messages: =Local.LatestMessage\n      output:\n        messages: Local.LatestMessage\n        autoSend: true\n    - kind: InvokeAzureAgent\n      id: editor\n      agent:\n        name: marketing-editor\n      description: Polish and finalize the marketing copy\n      conversationId: =System.ConversationId\n      input:\n        messages: =Local.LatestMessage\n      output:\n        messages: Local.LatestMessage\n        autoSend: true\nid: \"\"\ndescription: \"Sequential marketing pipeline: Analyst -> Copywriter -> Editor\"\n\"@\n\n      $wfBody = @{\n        definition = @{\n          kind = \"workflow\"\n          name = $env:WORKFLOW_NAME\n          description = \"Sequential marketing pipeline: Analyst -> Copywriter -> Editor\"\n          workflow = $workflowYaml\n        }\n      } | ConvertTo-Json -Depth 5\n      $wfUri = \"$baseUrl/agents/$($env:WORKFLOW_NAME)/versions?api-version=v1\"\n      $wfResult = Invoke-RestMethod -Uri $wfUri -Method Post -Headers $headers -Body $wfBody\n      $wfVersion = $wfResult.version\n      Write-Host \"Created workflow: $($env:WORKFLOW_NAME):$wfVersion\"\n\n      # Publish as Agent Application\n      $armToken = (Get-AzAccessToken -ResourceUrl \"https://management.azure.com\").Token\n      $armHeaders = @{\n        \"Authorization\" = \"Bearer $armToken\"\n        \"Content-Type\" = \"application/json\"\n      }\n      $armBase = \"https://management.azure.com/subscriptions/$($env:SUBSCRIPTION_ID)/resourceGroups/$($env:RESOURCE_GROUP)/providers/Microsoft.CognitiveServices/accounts/$($env:ACCOUNT_NAME)/projects/$($env:PROJECT_NAME)\"\n\n      # Create application\n      $appBody = @{\n        properties = @{\n          agents = @(@{ agentName = $env:WORKFLOW_NAME })\n          displayName = \"Marketing Pipeline Application\"\n          description = \"Sequential workflow: Analyst -> Copywriter -> Editor\"\n        }\n      } | ConvertTo-Json -Depth 5\n      Invoke-RestMethod -Uri \"$armBase/applications/$($env:APP_NAME)?api-version=2026-01-15-preview\" -Method Put -Headers $armHeaders -Body $appBody\n      Write-Host \"Created application: $($env:APP_NAME)\"\n\n      # Create deployment\n      $deployBody = @{\n        properties = @{\n          displayName = \"Marketing Pipeline Deployment\"\n          deploymentType = \"Managed\"\n          protocols = @(@{ protocol = \"Responses\"; version = \"1.0\" })\n          agents = @(@{ agentName = $env:WORKFLOW_NAME; agentVersion = \"$wfVersion\" })\n        }\n      } | ConvertTo-Json -Depth 5\n      Invoke-RestMethod -Uri \"$armBase/applications/$($env:APP_NAME)/agentdeployments/$($env:DEPLOY_NAME)?api-version=2026-01-15-preview\" -Method Put -Headers $armHeaders -Body $deployBody\n      Write-Host \"Created deployment: $($env:DEPLOY_NAME)\"\n\n      # Output results\n      $DeploymentScriptOutputs = @{\n        workflowName = $env:WORKFLOW_NAME\n        workflowVersion = \"$wfVersion\"\n        applicationName = $env:APP_NAME\n        deploymentName = $env:DEPLOY_NAME\n        endpoint = \"$armBase/applications/$($env:APP_NAME)\"\n      }\n    "
+              },
+              "dependsOn": [
+                "[resourceId('Microsoft.Authorization/roleAssignments', guid(resourceGroup().id, resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', format('{0}-script-identity', parameters('workflowName'))), 'contributor-workflow'))]",
+                "[resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', format('{0}-script-identity', parameters('workflowName')))]",
+                "[extensionResourceId(resourceId('Microsoft.CognitiveServices/accounts', parameters('accountName')), 'Microsoft.Authorization/roleAssignments', guid(resourceId('Microsoft.CognitiveServices/accounts', parameters('accountName')), resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', format('{0}-script-identity', parameters('workflowName'))), 'a]97b-65b7-4e0b-9910-1c2e2f5e5e5e'))]"
+              ]
+            }
+          ],
+          "outputs": {
+            "workflowName": {
+              "type": "string",
+              "value": "[parameters('workflowName')]"
+            },
+            "applicationName": {
+              "type": "string",
+              "value": "[parameters('applicationName')]"
+            },
+            "deploymentName": {
+              "type": "string",
+              "value": "[parameters('deploymentName')]"
+            }
+          }
+        }
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.Resources/deployments', format('capabilityHost-configuration-{0}-deployment', variables('uniqueSuffix')))]",
+        "[resourceId('Microsoft.Resources/deployments', format('{0}-{1}-deployment', variables('accountName'), variables('uniqueSuffix')))]",
+        "[resourceId('Microsoft.Resources/deployments', format('{0}-{1}-deployment', variables('projectName'), variables('uniqueSuffix')))]",
+        "[resourceId('Microsoft.Resources/deployments', format('apim-gateway-connection-{0}-deployment', variables('uniqueSuffix')))]"
+      ]
+    },
+    {
+      "condition": "[parameters('deployTeamsPublishing')]",
+      "type": "Microsoft.Resources/deployments",
+      "apiVersion": "2025-04-01",
+      "name": "[format('teams-publish-{0}-deployment', variables('uniqueSuffix'))]",
+      "properties": {
+        "expressionEvaluationOptions": {
+          "scope": "inner"
+        },
+        "mode": "Incremental",
+        "parameters": {
+          "location": {
+            "value": "[parameters('location')]"
+          },
+          "accountName": {
+            "value": "[reference(resourceId('Microsoft.Resources/deployments', format('{0}-{1}-deployment', variables('accountName'), variables('uniqueSuffix'))), '2025-04-01').outputs.accountName.value]"
+          },
+          "projectName": {
+            "value": "[reference(resourceId('Microsoft.Resources/deployments', format('{0}-{1}-deployment', variables('projectName'), variables('uniqueSuffix'))), '2025-04-01').outputs.projectName.value]"
+          },
+          "agentName": {
+            "value": "[parameters('teamsAgentName')]"
+          },
+          "applicationName": {
+            "value": "[parameters('teamsApplicationName')]"
+          }
+        },
+        "template": {
+          "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+          "contentVersion": "1.0.0.0",
+          "metadata": {
+            "_generator": {
+              "name": "bicep",
+              "version": "0.42.1.51946",
+              "templateHash": "11922378317959712371"
+            }
+          },
+          "parameters": {
+            "location": {
+              "type": "string",
+              "metadata": {
+                "description": "Azure region"
+              }
+            },
+            "accountName": {
+              "type": "string",
+              "metadata": {
+                "description": "Name of the AI Foundry account"
+              }
+            },
+            "projectName": {
+              "type": "string",
+              "metadata": {
+                "description": "Name of the project"
+              }
+            },
+            "agentName": {
+              "type": "string",
+              "metadata": {
+                "description": "Name of the agent to publish"
+              }
+            },
+            "agentVersion": {
+              "type": "string",
+              "defaultValue": "",
+              "metadata": {
+                "description": "Version of the agent to publish (empty = latest)"
+              }
+            },
+            "applicationName": {
+              "type": "string",
+              "metadata": {
+                "description": "Name for the Agent Application"
+              }
+            },
+            "deploymentName": {
+              "type": "string",
+              "defaultValue": "teams-deployment",
+              "metadata": {
+                "description": "Name for the deployment"
+              }
+            }
+          },
+          "resources": [
+            {
+              "type": "Microsoft.ManagedIdentity/userAssignedIdentities",
+              "apiVersion": "2023-01-31",
+              "name": "[format('{0}-publish-identity', parameters('applicationName'))]",
+              "location": "[parameters('location')]"
+            },
+            {
+              "type": "Microsoft.Authorization/roleAssignments",
+              "apiVersion": "2022-04-01",
+              "name": "[guid(resourceGroup().id, resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', format('{0}-publish-identity', parameters('applicationName'))), 'contributor-teams-publish')]",
+              "properties": {
+                "principalId": "[reference(resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', format('{0}-publish-identity', parameters('applicationName'))), '2023-01-31').principalId]",
+                "principalType": "ServicePrincipal",
+                "roleDefinitionId": "[subscriptionResourceId('Microsoft.Authorization/roleDefinitions', 'b24988ac-6180-42a0-ab88-20f7382dd24c')]"
+              },
+              "dependsOn": [
+                "[resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', format('{0}-publish-identity', parameters('applicationName')))]"
+              ]
+            },
+            {
+              "type": "Microsoft.Authorization/roleAssignments",
+              "apiVersion": "2022-04-01",
+              "scope": "[resourceId('Microsoft.CognitiveServices/accounts', parameters('accountName'))]",
+              "name": "[guid(resourceId('Microsoft.CognitiveServices/accounts', parameters('accountName')), resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', format('{0}-publish-identity', parameters('applicationName'))), 'ai-developer-teams-publish')]",
+              "properties": {
+                "principalId": "[reference(resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', format('{0}-publish-identity', parameters('applicationName'))), '2023-01-31').principalId]",
+                "principalType": "ServicePrincipal",
+                "roleDefinitionId": "[subscriptionResourceId('Microsoft.Authorization/roleDefinitions', '64702f94-c441-49e6-a78b-ef80e0188fee')]"
+              },
+              "dependsOn": [
+                "[resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', format('{0}-publish-identity', parameters('applicationName')))]"
+              ]
+            },
+            {
+              "type": "Microsoft.Resources/deploymentScripts",
+              "apiVersion": "2023-08-01",
+              "name": "[format('{0}-publish-script', parameters('applicationName'))]",
+              "location": "[parameters('location')]",
+              "kind": "AzurePowerShell",
+              "identity": {
+                "type": "UserAssigned",
+                "userAssignedIdentities": {
+                  "[format('{0}', resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', format('{0}-publish-identity', parameters('applicationName'))))]": {}
+                }
+              },
+              "properties": {
+                "azPowerShellVersion": "12.0",
+                "retentionInterval": "PT1H",
+                "timeout": "PT10M",
+                "environmentVariables": [
+                  {
+                    "name": "ACCOUNT_NAME",
+                    "value": "[parameters('accountName')]"
+                  },
+                  {
+                    "name": "PROJECT_NAME",
+                    "value": "[parameters('projectName')]"
+                  },
+                  {
+                    "name": "AGENT_NAME",
+                    "value": "[parameters('agentName')]"
+                  },
+                  {
+                    "name": "AGENT_VERSION",
+                    "value": "[parameters('agentVersion')]"
+                  },
+                  {
+                    "name": "APP_NAME",
+                    "value": "[parameters('applicationName')]"
+                  },
+                  {
+                    "name": "DEPLOY_NAME",
+                    "value": "[parameters('deploymentName')]"
+                  },
+                  {
+                    "name": "SUBSCRIPTION_ID",
+                    "value": "[subscription().subscriptionId]"
+                  },
+                  {
+                    "name": "RESOURCE_GROUP",
+                    "value": "[resourceGroup().name]"
+                  }
+                ],
+                "scriptContent": "      $ErrorActionPreference = 'Stop'\n\n      $armBase = \"https://management.azure.com/subscriptions/$($env:SUBSCRIPTION_ID)/resourceGroups/$($env:RESOURCE_GROUP)/providers/Microsoft.CognitiveServices/accounts/$($env:ACCOUNT_NAME)/projects/$($env:PROJECT_NAME)\"\n\n      # Get ARM token\n      $armToken = (Get-AzAccessToken -ResourceUrl \"https://management.azure.com\").Token\n      $armHeaders = @{\n        \"Authorization\" = \"Bearer $armToken\"\n        \"Content-Type\" = \"application/json\"\n      }\n\n      # Resolve agent version if not specified\n      $agentVersion = $env:AGENT_VERSION\n      if ([string]::IsNullOrEmpty($agentVersion)) {\n        $aiToken = (Get-AzAccessToken -ResourceUrl \"https://ai.azure.com\").Token\n        $aiHeaders = @{ \"Authorization\" = \"Bearer $aiToken\"; \"Content-Type\" = \"application/json\" }\n        $baseUrl = \"https://$($env:ACCOUNT_NAME).services.ai.azure.com/api/projects/$($env:PROJECT_NAME)\"\n        $versions = Invoke-RestMethod -Uri \"$baseUrl/agents/$($env:AGENT_NAME)/versions?api-version=v1\" -Headers $aiHeaders\n        $agentVersion = $versions.data[0].version\n        Write-Host \"Resolved latest agent version: $agentVersion\"\n      }\n\n      # Create Agent Application\n      $appBody = @{\n        properties = @{\n          agents = @(@{ agentName = $env:AGENT_NAME })\n          displayName = \"$($env:APP_NAME)\"\n          description = \"Published agent for Teams integration\"\n        }\n      } | ConvertTo-Json -Depth 5\n      try {\n        $appResult = Invoke-RestMethod -Uri \"$armBase/applications/$($env:APP_NAME)?api-version=2026-01-15-preview\" -Method Put -Headers $armHeaders -Body $appBody\n        Write-Host \"Created application: $($env:APP_NAME)\"\n      } catch {\n        Write-Host \"Application may already exist, continuing...\"\n      }\n\n      # Create Managed Deployment\n      $deployBody = @{\n        properties = @{\n          displayName = \"Teams Deployment\"\n          deploymentType = \"Managed\"\n          protocols = @(\n            @{ protocol = \"Responses\"; version = \"1.0\" }\n            @{ protocol = \"ActivityProtocol\"; version = \"1.0\" }\n          )\n          agents = @(@{ agentName = $env:AGENT_NAME; agentVersion = \"$agentVersion\" })\n        }\n      } | ConvertTo-Json -Depth 5\n      try {\n        $deployResult = Invoke-RestMethod -Uri \"$armBase/applications/$($env:APP_NAME)/agentdeployments/$($env:DEPLOY_NAME)?api-version=2026-01-15-preview\" -Method Put -Headers $armHeaders -Body $deployBody\n        Write-Host \"Created deployment: $($env:DEPLOY_NAME)\"\n      } catch {\n        Write-Host \"Deployment may already exist, continuing...\"\n      }\n\n      # Get the application details for the Activity Protocol URL\n      $app = Invoke-RestMethod -Uri \"$armBase/applications/$($env:APP_NAME)?api-version=2026-01-15-preview\" -Method Get -Headers $armHeaders\n      $baseUrl = $app.properties.baseUrl\n      $activityUrl = \"$baseUrl/protocols/activityprotocol\"\n      $botClientId = $app.properties.defaultInstanceIdentity.clientId\n\n      Write-Host \"Activity Protocol URL: $activityUrl\"\n      Write-Host \"Bot Client ID: $botClientId\"\n\n      $DeploymentScriptOutputs = @{\n        activityProtocolUrl = $activityUrl\n        applicationBaseUrl = $baseUrl\n        botClientId = $botClientId\n        agentVersion = \"$agentVersion\"\n      }\n    "
+              },
+              "dependsOn": [
+                "[extensionResourceId(resourceId('Microsoft.CognitiveServices/accounts', parameters('accountName')), 'Microsoft.Authorization/roleAssignments', guid(resourceId('Microsoft.CognitiveServices/accounts', parameters('accountName')), resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', format('{0}-publish-identity', parameters('applicationName'))), 'ai-developer-teams-publish'))]",
+                "[resourceId('Microsoft.Authorization/roleAssignments', guid(resourceGroup().id, resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', format('{0}-publish-identity', parameters('applicationName'))), 'contributor-teams-publish'))]",
+                "[resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', format('{0}-publish-identity', parameters('applicationName')))]"
+              ]
+            }
+          ],
+          "outputs": {
+            "activityProtocolUrl": {
+              "type": "string",
+              "value": "[reference(resourceId('Microsoft.Resources/deploymentScripts', format('{0}-publish-script', parameters('applicationName'))), '2023-08-01').outputs.activityProtocolUrl]"
+            },
+            "applicationBaseUrl": {
+              "type": "string",
+              "value": "[reference(resourceId('Microsoft.Resources/deploymentScripts', format('{0}-publish-script', parameters('applicationName'))), '2023-08-01').outputs.applicationBaseUrl]"
+            },
+            "botClientId": {
+              "type": "string",
+              "value": "[reference(resourceId('Microsoft.Resources/deploymentScripts', format('{0}-publish-script', parameters('applicationName'))), '2023-08-01').outputs.botClientId]"
+            },
+            "agentVersion": {
+              "type": "string",
+              "value": "[reference(resourceId('Microsoft.Resources/deploymentScripts', format('{0}-publish-script', parameters('applicationName'))), '2023-08-01').outputs.agentVersion]"
+            }
+          }
+        }
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.Resources/deployments', format('capabilityHost-configuration-{0}-deployment', variables('uniqueSuffix')))]",
+        "[resourceId('Microsoft.Resources/deployments', format('{0}-{1}-deployment', variables('accountName'), variables('uniqueSuffix')))]",
+        "[resourceId('Microsoft.Resources/deployments', format('{0}-{1}-deployment', variables('projectName'), variables('uniqueSuffix')))]",
+        "[resourceId('Microsoft.Resources/deployments', format('workflow-{0}-deployment', variables('uniqueSuffix')))]"
+      ]
+    },
+    {
+      "condition": "[parameters('deployTeamsPublishing')]",
+      "type": "Microsoft.Resources/deployments",
+      "apiVersion": "2025-04-01",
+      "name": "[format('teams-infra-{0}-deployment', variables('uniqueSuffix'))]",
+      "properties": {
+        "expressionEvaluationOptions": {
+          "scope": "inner"
+        },
+        "mode": "Incremental",
+        "parameters": {
+          "location": {
+            "value": "[parameters('location')]"
+          },
+          "vnetName": {
+            "value": "[reference(resourceId('Microsoft.Resources/deployments', format('vnet-{0}-{1}-deployment', variables('trimVnetName'), variables('uniqueSuffix'))), '2025-04-01').outputs.virtualNetworkName.value]"
+          },
+          "appGwSubnetPrefix": {
+            "value": "[parameters('appGwSubnetPrefix')]"
+          },
+          "apimName": "[if(parameters('deployApiManagement'), createObject('value', reference(resourceId('Microsoft.Resources/deployments', format('apim-{0}-deployment', variables('uniqueSuffix'))), '2025-04-01').outputs.apiManagementName.value), createObject('value', reference(resourceId('Microsoft.Resources/deployments', format('validate-existing-resources-{0}-deployment', variables('uniqueSuffix'))), '2025-04-01').outputs.apiManagementName.value))]",
+          "accountName": {
+            "value": "[reference(resourceId('Microsoft.Resources/deployments', format('{0}-{1}-deployment', variables('accountName'), variables('uniqueSuffix'))), '2025-04-01').outputs.accountName.value]"
+          },
+          "projectName": {
+            "value": "[reference(resourceId('Microsoft.Resources/deployments', format('{0}-{1}-deployment', variables('projectName'), variables('uniqueSuffix'))), '2025-04-01').outputs.projectName.value]"
+          },
+          "applicationName": {
+            "value": "[parameters('teamsApplicationName')]"
+          },
+          "customDomain": {
+            "value": "[parameters('teamsCustomDomain')]"
+          },
+          "botClientId": "[if(parameters('deployTeamsPublishing'), createObject('value', reference(resourceId('Microsoft.Resources/deployments', format('teams-publish-{0}-deployment', variables('uniqueSuffix'))), '2025-04-01').outputs.botClientId.value), createObject('value', ''))]",
+          "activityProtocolUrl": "[if(parameters('deployTeamsPublishing'), createObject('value', reference(resourceId('Microsoft.Resources/deployments', format('teams-publish-{0}-deployment', variables('uniqueSuffix'))), '2025-04-01').outputs.activityProtocolUrl.value), createObject('value', ''))]"
+        },
+        "template": {
+          "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+          "contentVersion": "1.0.0.0",
+          "metadata": {
+            "_generator": {
+              "name": "bicep",
+              "version": "0.42.1.51946",
+              "templateHash": "14049766914239102624"
+            }
+          },
+          "parameters": {
+            "location": {
+              "type": "string",
+              "metadata": {
+                "description": "Azure region"
+              }
+            },
+            "vnetName": {
+              "type": "string",
+              "metadata": {
+                "description": "VNet name"
+              }
+            },
+            "appGwSubnetPrefix": {
+              "type": "string",
+              "defaultValue": "192.168.5.0/24",
+              "metadata": {
+                "description": "Address prefix for Application Gateway subnet"
+              }
+            },
+            "apimName": {
+              "type": "string",
+              "metadata": {
+                "description": "Name of the APIM service"
+              }
+            },
+            "accountName": {
+              "type": "string",
+              "metadata": {
+                "description": "Name of the AI Foundry account"
+              }
+            },
+            "projectName": {
+              "type": "string",
+              "metadata": {
+                "description": "Name of the project"
+              }
+            },
+            "applicationName": {
+              "type": "string",
+              "metadata": {
+                "description": "Name of the published Agent Application"
+              }
+            },
+            "customDomain": {
+              "type": "string",
+              "metadata": {
+                "description": "Custom domain for the Bot messaging endpoint (e.g., agent.yourcompany.com)"
+              }
+            },
+            "keyVaultName": {
+              "type": "string",
+              "defaultValue": "",
+              "metadata": {
+                "description": "Key Vault name for TLS certificate"
+              }
+            },
+            "tlsCertName": {
+              "type": "string",
+              "defaultValue": "teams-bot-tls",
+              "metadata": {
+                "description": "Name of the TLS certificate in Key Vault"
+              }
+            },
+            "botClientId": {
+              "type": "string",
+              "metadata": {
+                "description": "Bot Client ID (msaAppId) — the Agent Application identity client ID"
+              }
+            },
+            "botTenantId": {
+              "type": "string",
+              "defaultValue": "",
+              "metadata": {
+                "description": "Bot Tenant ID"
+              }
+            },
+            "activityProtocolUrl": {
+              "type": "string",
+              "metadata": {
+                "description": "Foundry Activity Protocol URL for the published application"
+              }
+            }
+          },
+          "variables": {
+            "finalKeyVaultName": "[if(not(empty(parameters('keyVaultName'))), parameters('keyVaultName'), format('{0}-kv', parameters('accountName')))]",
+            "finalBotTenantId": "[if(not(empty(parameters('botTenantId'))), parameters('botTenantId'), tenant().tenantId)]",
+            "botName": "[format('{0}-bot', parameters('applicationName'))]",
+            "appGwName": "[format('{0}-appgw', parameters('accountName'))]",
+            "appGwPipName": "[format('{0}-pip', variables('appGwName'))]"
+          },
+          "resources": [
+            {
+              "type": "Microsoft.Network/virtualNetworks/subnets",
+              "apiVersion": "2024-05-01",
+              "name": "[format('{0}/{1}', parameters('vnetName'), 'appgw-subnet')]",
+              "properties": {
+                "addressPrefix": "[parameters('appGwSubnetPrefix')]"
+              }
+            },
+            {
+              "type": "Microsoft.KeyVault/vaults",
+              "apiVersion": "2023-07-01",
+              "name": "[variables('finalKeyVaultName')]",
+              "location": "[parameters('location')]",
+              "properties": {
+                "sku": {
+                  "family": "A",
+                  "name": "standard"
+                },
+                "tenantId": "[tenant().tenantId]",
+                "enableRbacAuthorization": true,
+                "enableSoftDelete": true,
+                "softDeleteRetentionInDays": 7
+              }
+            },
+            {
+              "type": "Microsoft.Network/publicIPAddresses",
+              "apiVersion": "2024-05-01",
+              "name": "[variables('appGwPipName')]",
+              "location": "[parameters('location')]",
+              "sku": {
+                "name": "Standard"
+              },
+              "properties": {
+                "publicIPAllocationMethod": "Static"
+              }
+            },
+            {
+              "type": "Microsoft.ManagedIdentity/userAssignedIdentities",
+              "apiVersion": "2023-01-31",
+              "name": "[format('{0}-identity', variables('appGwName'))]",
+              "location": "[parameters('location')]"
+            },
+            {
+              "type": "Microsoft.Authorization/roleAssignments",
+              "apiVersion": "2022-04-01",
+              "scope": "[resourceId('Microsoft.KeyVault/vaults', variables('finalKeyVaultName'))]",
+              "name": "[guid(resourceId('Microsoft.KeyVault/vaults', variables('finalKeyVaultName')), resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', format('{0}-identity', variables('appGwName'))), '4633458b-17de-408a-b874-0445c86b69e6')]",
+              "properties": {
+                "principalId": "[reference(resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', format('{0}-identity', variables('appGwName'))), '2023-01-31').principalId]",
+                "principalType": "ServicePrincipal",
+                "roleDefinitionId": "[subscriptionResourceId('Microsoft.Authorization/roleDefinitions', '4633458b-17de-408a-b874-0445c86b69e6')]"
+              },
+              "dependsOn": [
+                "[resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', format('{0}-identity', variables('appGwName')))]",
+                "[resourceId('Microsoft.KeyVault/vaults', variables('finalKeyVaultName'))]"
+              ]
+            },
+            {
+              "type": "Microsoft.Network/applicationGateways",
+              "apiVersion": "2024-05-01",
+              "name": "[variables('appGwName')]",
+              "location": "[parameters('location')]",
+              "identity": {
+                "type": "UserAssigned",
+                "userAssignedIdentities": {
+                  "[format('{0}', resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', format('{0}-identity', variables('appGwName'))))]": {}
+                }
+              },
+              "properties": {
+                "sku": {
+                  "name": "WAF_v2",
+                  "tier": "WAF_v2",
+                  "capacity": 1
+                },
+                "gatewayIPConfigurations": [
+                  {
+                    "name": "appGwIpConfig",
+                    "properties": {
+                      "subnet": {
+                        "id": "[resourceId('Microsoft.Network/virtualNetworks/subnets', parameters('vnetName'), 'appgw-subnet')]"
+                      }
+                    }
+                  }
+                ],
+                "frontendIPConfigurations": [
+                  {
+                    "name": "appGwPublicFrontendIp",
+                    "properties": {
+                      "publicIPAddress": {
+                        "id": "[resourceId('Microsoft.Network/publicIPAddresses', variables('appGwPipName'))]"
+                      }
+                    }
+                  }
+                ],
+                "frontendPorts": [
+                  {
+                    "name": "port_443",
+                    "properties": {
+                      "port": 443
+                    }
+                  }
+                ],
+                "backendAddressPools": [
+                  {
+                    "name": "apim-backend",
+                    "properties": {
+                      "backendAddresses": [
+                        {
+                          "fqdn": "[format('{0}.azure-api.net', parameters('apimName'))]"
+                        }
+                      ]
+                    }
+                  }
+                ],
+                "backendHttpSettingsCollection": [
+                  {
+                    "name": "apim-https-settings",
+                    "properties": {
+                      "port": 443,
+                      "protocol": "Https",
+                      "cookieBasedAffinity": "Disabled",
+                      "requestTimeout": 60,
+                      "pickHostNameFromBackendAddress": true
+                    }
+                  }
+                ],
+                "httpListeners": [
+                  {
+                    "name": "https-listener",
+                    "properties": {
+                      "frontendIPConfiguration": {
+                        "id": "[resourceId('Microsoft.Network/applicationGateways/frontendIPConfigurations', variables('appGwName'), 'appGwPublicFrontendIp')]"
+                      },
+                      "frontendPort": {
+                        "id": "[resourceId('Microsoft.Network/applicationGateways/frontendPorts', variables('appGwName'), 'port_443')]"
+                      },
+                      "protocol": "Https",
+                      "hostName": "[parameters('customDomain')]",
+                      "sslCertificate": {
+                        "id": "[resourceId('Microsoft.Network/applicationGateways/sslCertificates', variables('appGwName'), 'tls-cert')]"
+                      }
+                    }
+                  }
+                ],
+                "sslCertificates": [
+                  {
+                    "name": "tls-cert",
+                    "properties": {
+                      "keyVaultSecretId": "[format('{0}secrets/{1}', reference(resourceId('Microsoft.KeyVault/vaults', variables('finalKeyVaultName')), '2023-07-01').vaultUri, parameters('tlsCertName'))]"
+                    }
+                  }
+                ],
+                "requestRoutingRules": [
+                  {
+                    "name": "bot-routing-rule",
+                    "properties": {
+                      "priority": 100,
+                      "ruleType": "Basic",
+                      "httpListener": {
+                        "id": "[resourceId('Microsoft.Network/applicationGateways/httpListeners', variables('appGwName'), 'https-listener')]"
+                      },
+                      "backendAddressPool": {
+                        "id": "[resourceId('Microsoft.Network/applicationGateways/backendAddressPools', variables('appGwName'), 'apim-backend')]"
+                      },
+                      "backendHttpSettings": {
+                        "id": "[resourceId('Microsoft.Network/applicationGateways/backendHttpSettingsCollection', variables('appGwName'), 'apim-https-settings')]"
+                      }
+                    }
+                  }
+                ],
+                "webApplicationFirewallConfiguration": {
+                  "enabled": true,
+                  "firewallMode": "Prevention",
+                  "ruleSetType": "OWASP",
+                  "ruleSetVersion": "3.2"
+                }
+              },
+              "dependsOn": [
+                "[resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', format('{0}-identity', variables('appGwName')))]",
+                "[extensionResourceId(resourceId('Microsoft.KeyVault/vaults', variables('finalKeyVaultName')), 'Microsoft.Authorization/roleAssignments', guid(resourceId('Microsoft.KeyVault/vaults', variables('finalKeyVaultName')), resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', format('{0}-identity', variables('appGwName'))), '4633458b-17de-408a-b874-0445c86b69e6'))]",
+                "[resourceId('Microsoft.Network/publicIPAddresses', variables('appGwPipName'))]",
+                "[resourceId('Microsoft.Network/virtualNetworks/subnets', parameters('vnetName'), 'appgw-subnet')]",
+                "[resourceId('Microsoft.KeyVault/vaults', variables('finalKeyVaultName'))]"
+              ]
+            },
+            {
+              "type": "Microsoft.ApiManagement/service/apis",
+              "apiVersion": "2024-05-01",
+              "name": "[format('{0}/{1}', parameters('apimName'), 'bot-messaging')]",
+              "properties": {
+                "displayName": "Bot Messaging Endpoint",
+                "path": "bot",
+                "protocols": [
+                  "https"
+                ],
+                "subscriptionRequired": false,
+                "serviceUrl": "[parameters('activityProtocolUrl')]"
+              }
+            },
+            {
+              "type": "Microsoft.ApiManagement/service/apis/operations",
+              "apiVersion": "2024-05-01",
+              "name": "[format('{0}/{1}/{2}', parameters('apimName'), 'bot-messaging', 'forward-messages')]",
+              "properties": {
+                "displayName": "Forward Bot Messages",
+                "method": "POST",
+                "urlTemplate": "/*"
+              },
+              "dependsOn": [
+                "[resourceId('Microsoft.ApiManagement/service/apis', parameters('apimName'), 'bot-messaging')]"
+              ]
+            },
+            {
+              "type": "Microsoft.ApiManagement/service/apis/policies",
+              "apiVersion": "2024-05-01",
+              "name": "[format('{0}/{1}/{2}', parameters('apimName'), 'bot-messaging', 'policy')]",
+              "properties": {
+                "format": "xml",
+                "value": "[format('<policies><inbound><validate-jwt header-name=\"Authorization\" require-scheme=\"Bearer\" failed-validation-httpcode=\"401\" failed-validation-error-message=\"Unauthorized - Invalid Bot token\"><openid-config url=\"https://login.botframework.com/v1/.well-known/openidconfiguration\" /><audiences><audience>{0}</audience></audiences><issuers><issuer>https://api.botframework.com</issuer></issuers></validate-jwt><base /></inbound><backend><base /></backend><outbound><base /></outbound><on-error><base /></on-error></policies>', parameters('botClientId'))]"
+              },
+              "dependsOn": [
+                "[resourceId('Microsoft.ApiManagement/service/apis', parameters('apimName'), 'bot-messaging')]"
+              ]
+            },
+            {
+              "type": "Microsoft.BotService/botServices",
+              "apiVersion": "2023-09-15-preview",
+              "name": "[variables('botName')]",
+              "location": "global",
+              "kind": "azurebot",
+              "sku": {
+                "name": "S1"
+              },
+              "properties": {
+                "displayName": "[parameters('applicationName')]",
+                "description": "Foundry Agent published to Teams via private network",
+                "endpoint": "[format('https://{0}/bot', parameters('customDomain'))]",
+                "msaAppId": "[parameters('botClientId')]",
+                "msaAppTenantId": "[variables('finalBotTenantId')]",
+                "msaAppType": "SingleTenant",
+                "publicNetworkAccess": "Enabled"
+              }
+            },
+            {
+              "type": "Microsoft.BotService/botServices/channels",
+              "apiVersion": "2023-09-15-preview",
+              "name": "[format('{0}/{1}', variables('botName'), 'MsTeamsChannel')]",
+              "location": "global",
+              "properties": {
+                "channelName": "MsTeamsChannel",
+                "properties": {
+                  "acceptedTerms": true,
+                  "isEnabled": true
+                }
+              },
+              "dependsOn": [
+                "[resourceId('Microsoft.BotService/botServices', variables('botName'))]"
+              ]
+            }
+          ],
+          "outputs": {
+            "appGatewayPublicIp": {
+              "type": "string",
+              "value": "[reference(resourceId('Microsoft.Network/publicIPAddresses', variables('appGwPipName')), '2024-05-01').ipAddress]"
+            },
+            "appGatewayName": {
+              "type": "string",
+              "value": "[variables('appGwName')]"
+            },
+            "botServiceName": {
+              "type": "string",
+              "value": "[variables('botName')]"
+            },
+            "botEndpoint": {
+              "type": "string",
+              "value": "[format('https://{0}/bot', parameters('customDomain'))]"
+            },
+            "keyVaultName": {
+              "type": "string",
+              "value": "[variables('finalKeyVaultName')]"
+            },
+            "dnsInstruction": {
+              "type": "string",
+              "value": "[format('Create DNS A record: {0} → {1}', parameters('customDomain'), reference(resourceId('Microsoft.Network/publicIPAddresses', variables('appGwPipName')), '2024-05-01').ipAddress)]"
+            }
+          }
+        }
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.Resources/deployments', format('{0}-{1}-deployment', variables('accountName'), variables('uniqueSuffix')))]",
+        "[resourceId('Microsoft.Resources/deployments', format('{0}-{1}-deployment', variables('projectName'), variables('uniqueSuffix')))]",
+        "[resourceId('Microsoft.Resources/deployments', format('apim-{0}-deployment', variables('uniqueSuffix')))]",
+        "[resourceId('Microsoft.Resources/deployments', format('{0}-private-endpoint', variables('uniqueSuffix')))]",
+        "[resourceId('Microsoft.Resources/deployments', format('teams-publish-{0}-deployment', variables('uniqueSuffix')))]",
         "[resourceId('Microsoft.Resources/deployments', format('validate-existing-resources-{0}-deployment', variables('uniqueSuffix')))]",
         "[resourceId('Microsoft.Resources/deployments', format('vnet-{0}-{1}-deployment', variables('trimVnetName'), variables('uniqueSuffix')))]"
       ]
