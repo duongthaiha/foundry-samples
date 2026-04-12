@@ -1,0 +1,48 @@
+{
+  "$schema": "https://developer.microsoft.com/en-us/json-schemas/teams/v1.17/MicrosoftTeams.schema.json",
+  "accentColor": "#0078D4",
+  "manifestVersion": "1.17",
+  "description": {
+    "full": "Sequential workflow that analyzes products, writes marketing copy, and polishes the final output using three specialized AI agents: Marketing Analyst, Copywriter, and Editor. Powered by Azure AI Foundry with APIM gateway.",
+    "short": "AI-powered marketing content pipeline"
+  },
+  "version": "1.0.0",
+  "id": "fbd5861e-effa-4409-ab74-4109b5b12179",
+  "developer": {
+    "privacyUrl": "https://belugaconsultant.co.uk/privacy",
+    "name": "Beluga Consultant",
+    "termsOfUseUrl": "https://belugaconsultant.co.uk/terms",
+    "websiteUrl": "https://belugaconsultant.co.uk"
+  },
+  "name": {
+    "full": "Marketing Pipeline AI Agent",
+    "short": "Marketing Pipeline"
+  },
+  "bots": [
+    {
+      "commandLists": [
+        {
+          "commands": [
+            {
+              "description": "Describe a product and get polished marketing copy",
+              "title": "Analyze"
+            }
+          ],
+          "scopes": [
+            "personal"
+          ]
+        }
+      ],
+      "scopes": [
+        "personal",
+        "team",
+        "groupChat"
+      ],
+      "botId": "fbd5861e-effa-4409-ab74-4109b5b12179"
+    }
+  ],
+  "icons": {
+    "color": "color.png",
+    "outline": "outline.png"
+  }
+}
