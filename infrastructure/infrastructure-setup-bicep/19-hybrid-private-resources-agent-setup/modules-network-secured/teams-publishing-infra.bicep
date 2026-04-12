@@ -106,6 +106,74 @@ resource appGwPip 'Microsoft.Network/publicIPAddresses@2024-05-01' = {
   }
 }
 
+// ---- Self-signed TLS Certificate (placeholder for testing) ----
+// In production, replace with a CA-issued certificate for your custom domain.
+// Upload via: az keyvault certificate import --vault-name <kv> --name teams-bot-tls --file cert.pfx
+resource certScript 'Microsoft.Resources/deploymentScripts@2023-08-01' = {
+  name: '${finalKeyVaultName}-cert-script'
+  location: location
+  kind: 'AzurePowerShell'
+  identity: {
+    type: 'UserAssigned'
+    userAssignedIdentities: {
+      '${appGwIdentity.id}': {}
+    }
+  }
+  properties: {
+    azPowerShellVersion: '12.0'
+    retentionInterval: 'PT1H'
+    timeout: 'PT5M'
+    environmentVariables: [
+      { name: 'KV_NAME', value: finalKeyVaultName }
+      { name: 'CERT_NAME', value: tlsCertName }
+      { name: 'DOMAIN', value: customDomain }
+    ]
+    scriptContent: '''
+      $ErrorActionPreference = 'Stop'
+      $policy = New-AzKeyVaultCertificatePolicy -SubjectName "CN=$($env:DOMAIN)" -IssuerName Self -ValidityInMonths 12 -SecretContentType 'application/x-pkcs12'
+      try {
+        $existing = Get-AzKeyVaultCertificate -VaultName $env:KV_NAME -Name $env:CERT_NAME -ErrorAction SilentlyContinue
+        if ($existing) {
+          Write-Host "Certificate already exists, skipping creation"
+        } else {
+          Add-AzKeyVaultCertificate -VaultName $env:KV_NAME -Name $env:CERT_NAME -CertificatePolicy $policy
+          Write-Host "Self-signed certificate created (placeholder — replace with CA cert for production)"
+        }
+      } catch {
+        Write-Host "Certificate creation skipped: $_"
+      }
+      $DeploymentScriptOutputs = @{ certName = $env:CERT_NAME }
+    '''
+  }
+  dependsOn: [
+    keyVault
+    appGwKvRole
+  ]
+}
+
+// ---- WAF Policy ----
+resource wafPolicy 'Microsoft.Network/ApplicationGatewayWebApplicationFirewallPolicies@2024-05-01' = {
+  name: '${appGwName}-waf-policy'
+  location: location
+  properties: {
+    policySettings: {
+      requestBodyCheck: true
+      maxRequestBodySizeInKb: 128
+      fileUploadLimitInMb: 100
+      state: 'Enabled'
+      mode: 'Prevention'
+    }
+    managedRules: {
+      managedRuleSets: [
+        {
+          ruleSetType: 'OWASP'
+          ruleSetVersion: '3.2'
+        }
+      ]
+    }
+  }
+}
+
 // ---- Application Gateway WAF v2 ----
 resource appGwIdentity 'Microsoft.ManagedIdentity/userAssignedIdentities@2023-01-31' = {
   name: '${appGwName}-identity'
@@ -240,9 +308,13 @@ resource appGw 'Microsoft.Network/applicationGateways@2024-05-01' = {
       ruleSetType: 'OWASP'
       ruleSetVersion: '3.2'
     }
+    firewallPolicy: {
+      id: wafPolicy.id
+    }
   }
   dependsOn: [
     appGwKvRole
+    certScript
   ]
 }
 

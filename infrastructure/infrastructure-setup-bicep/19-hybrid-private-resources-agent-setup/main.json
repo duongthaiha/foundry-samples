@@ -5,7 +5,7 @@
     "_generator": {
       "name": "bicep",
       "version": "0.42.1.51946",
-      "templateHash": "12146015775205697414"
+      "templateHash": "4915707538462299917"
     }
   },
   "parameters": {
@@ -4960,7 +4960,7 @@
             "_generator": {
               "name": "bicep",
               "version": "0.42.1.51946",
-              "templateHash": "14049766914239102624"
+              "templateHash": "6951727810652379958"
             }
           },
           "parameters": {
@@ -5089,6 +5089,67 @@
               },
               "properties": {
                 "publicIPAllocationMethod": "Static"
+              }
+            },
+            {
+              "type": "Microsoft.Resources/deploymentScripts",
+              "apiVersion": "2023-08-01",
+              "name": "[format('{0}-cert-script', variables('finalKeyVaultName'))]",
+              "location": "[parameters('location')]",
+              "kind": "AzurePowerShell",
+              "identity": {
+                "type": "UserAssigned",
+                "userAssignedIdentities": {
+                  "[format('{0}', resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', format('{0}-identity', variables('appGwName'))))]": {}
+                }
+              },
+              "properties": {
+                "azPowerShellVersion": "12.0",
+                "retentionInterval": "PT1H",
+                "timeout": "PT5M",
+                "environmentVariables": [
+                  {
+                    "name": "KV_NAME",
+                    "value": "[variables('finalKeyVaultName')]"
+                  },
+                  {
+                    "name": "CERT_NAME",
+                    "value": "[parameters('tlsCertName')]"
+                  },
+                  {
+                    "name": "DOMAIN",
+                    "value": "[parameters('customDomain')]"
+                  }
+                ],
+                "scriptContent": "      $ErrorActionPreference = 'Stop'\r\n      $policy = New-AzKeyVaultCertificatePolicy -SubjectName \"CN=$($env:DOMAIN)\" -IssuerName Self -ValidityInMonths 12 -SecretContentType 'application/x-pkcs12'\r\n      try {\r\n        $existing = Get-AzKeyVaultCertificate -VaultName $env:KV_NAME -Name $env:CERT_NAME -ErrorAction SilentlyContinue\r\n        if ($existing) {\r\n          Write-Host \"Certificate already exists, skipping creation\"\r\n        } else {\r\n          Add-AzKeyVaultCertificate -VaultName $env:KV_NAME -Name $env:CERT_NAME -CertificatePolicy $policy\r\n          Write-Host \"Self-signed certificate created (placeholder — replace with CA cert for production)\"\r\n        }\r\n      } catch {\r\n        Write-Host \"Certificate creation skipped: $_\"\r\n      }\r\n      $DeploymentScriptOutputs = @{ certName = $env:CERT_NAME }\r\n    "
+              },
+              "dependsOn": [
+                "[resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', format('{0}-identity', variables('appGwName')))]",
+                "[extensionResourceId(resourceId('Microsoft.KeyVault/vaults', variables('finalKeyVaultName')), 'Microsoft.Authorization/roleAssignments', guid(resourceId('Microsoft.KeyVault/vaults', variables('finalKeyVaultName')), resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', format('{0}-identity', variables('appGwName'))), '4633458b-17de-408a-b874-0445c86b69e6'))]",
+                "[resourceId('Microsoft.KeyVault/vaults', variables('finalKeyVaultName'))]"
+              ]
+            },
+            {
+              "type": "Microsoft.Network/ApplicationGatewayWebApplicationFirewallPolicies",
+              "apiVersion": "2024-05-01",
+              "name": "[format('{0}-waf-policy', variables('appGwName'))]",
+              "location": "[parameters('location')]",
+              "properties": {
+                "policySettings": {
+                  "requestBodyCheck": true,
+                  "maxRequestBodySizeInKb": 128,
+                  "fileUploadLimitInMb": 100,
+                  "state": "Enabled",
+                  "mode": "Prevention"
+                },
+                "managedRules": {
+                  "managedRuleSets": [
+                    {
+                      "ruleSetType": "OWASP",
+                      "ruleSetVersion": "3.2"
+                    }
+                  ]
+                }
               }
             },
             {
@@ -5230,6 +5291,9 @@
                   "firewallMode": "Prevention",
                   "ruleSetType": "OWASP",
                   "ruleSetVersion": "3.2"
+                },
+                "firewallPolicy": {
+                  "id": "[resourceId('Microsoft.Network/ApplicationGatewayWebApplicationFirewallPolicies', format('{0}-waf-policy', variables('appGwName')))]"
                 }
               },
               "dependsOn": [
@@ -5237,7 +5301,9 @@
                 "[extensionResourceId(resourceId('Microsoft.KeyVault/vaults', variables('finalKeyVaultName')), 'Microsoft.Authorization/roleAssignments', guid(resourceId('Microsoft.KeyVault/vaults', variables('finalKeyVaultName')), resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', format('{0}-identity', variables('appGwName'))), '4633458b-17de-408a-b874-0445c86b69e6'))]",
                 "[resourceId('Microsoft.Network/publicIPAddresses', variables('appGwPipName'))]",
                 "[resourceId('Microsoft.Network/virtualNetworks/subnets', parameters('vnetName'), 'appgw-subnet')]",
-                "[resourceId('Microsoft.KeyVault/vaults', variables('finalKeyVaultName'))]"
+                "[resourceId('Microsoft.Resources/deploymentScripts', format('{0}-cert-script', variables('finalKeyVaultName')))]",
+                "[resourceId('Microsoft.KeyVault/vaults', variables('finalKeyVaultName'))]",
+                "[resourceId('Microsoft.Network/ApplicationGatewayWebApplicationFirewallPolicies', format('{0}-waf-policy', variables('appGwName')))]"
               ]
             },
             {

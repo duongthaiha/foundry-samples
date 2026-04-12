@@ -48,7 +48,7 @@ param deployWorkflow = false
 
 // Teams publishing
 param deployTeamsPublishing = false
-param teamsCustomDomain = ''
+param teamsCustomDomain = 'agent.belugaconsultant.co.uk'
 param teamsAgentName = 'marketing-pipeline'
 param teamsApplicationName = 'marketing-pipeline-teams'
 

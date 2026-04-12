@@ -50,30 +50,63 @@ az deployment group create \
 ```
 
 This creates:
-- Application Gateway WAF v2 with public IP
-- APIM Bot messaging API with JWT validation
-- Azure Bot Service linked to Application Gateway
-- Teams Channel on the Bot Service
-- Key Vault for TLS certificate
+- Application Gateway WAF v2 with public IP and WAF policy
+- Self-signed TLS certificate in Key Vault (placeholder — see Step 2)
+- APIM Bot messaging API with JWT validation policy
+- Azure Bot Service linked to Application Gateway endpoint
+- Teams Channel (`MsTeamsChannel`) on the Bot Service
+- Key Vault for TLS certificate storage
 - Agent Application + Managed Deployment (via deployment script)
 
-## Step 2: Upload TLS Certificate
+## Step 2: Replace TLS Certificate (Production)
 
-After deployment, upload your TLS certificate to Key Vault:
+The deployment creates a **self-signed certificate** as a placeholder. For production, replace it with a CA-issued certificate for your custom domain:
 
 ```bash
-# Get the Key Vault name from deployment outputs
-KV_NAME=$(az deployment group show \
-  --resource-group "rg-hybrid-agent-test" \
-  --name "main" \
-  --query "properties.outputs.keyVaultName.value" -o tsv)
-
-# Upload PFX certificate
+# Upload PFX certificate to Key Vault
 az keyvault certificate import \
-  --vault-name "$KV_NAME" \
+  --vault-name "<key-vault-name>" \
   --name "teams-bot-tls" \
   --file /path/to/your-certificate.pfx \
   --password "your-pfx-password"
+```
+
+> **Note:** The self-signed certificate allows the infrastructure to deploy fully, but Microsoft's Bot Channel Adapters will reject it. Obtain a Let's Encrypt certificate using the script below.
+
+## Step 2b: Obtain Let's Encrypt Certificate (Free)
+
+Use the provided script to obtain a free TLS certificate from Let's Encrypt:
+
+```powershell
+# Obtain Let's Encrypt cert via DNS-01 challenge
+./scripts/obtain-letsencrypt-cert.ps1 `
+  -Domain "agent.belugaconsultant.co.uk" `
+  -KeyVaultName "<key-vault-name>" `
+  -Email "admin@belugaconsultant.co.uk"
+```
+
+The script will:
+1. Run certbot in manual DNS-01 mode
+2. **Prompt you to create a TXT record at IONOS** — the script tells you the exact value
+3. Wait for you to confirm DNS propagation
+4. Obtain the certificate and import it as PFX to Key Vault
+
+### DNS Records at IONOS
+
+Go to [IONOS DNS Management](https://my.ionos.co.uk/domains) and create:
+
+| Record Type | Host | Value | TTL |
+|------------|------|-------|-----|
+| **A** | `agent` | `<App Gateway Public IP>` | 300 |
+| **TXT** | `_acme-challenge.agent` | `<value from certbot>` | 300 |
+
+> The TXT record can be deleted after the certificate is obtained. The A record must remain.
+
+### Certificate Renewal
+
+Let's Encrypt certificates expire after **90 days**. Re-run the script to renew:
+```powershell
+./scripts/obtain-letsencrypt-cert.ps1 -Domain "agent.belugaconsultant.co.uk" -KeyVaultName "<kv>" -Email "admin@belugaconsultant.co.uk"
 ```
 
 ## Step 3: Configure DNS
