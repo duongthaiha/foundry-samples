@@ -89,6 +89,12 @@ See [diagrams/architecture.md](diagrams/architecture.md) for the full Mermaid in
 2. Bicep CLI installed (`az bicep install`)
 3. Owner or Contributor role on the subscription
 4. Sufficient quota for model deployments
+5. Required resource providers registered:
+
+```bash
+az provider register --namespace Microsoft.App
+az provider register --namespace Microsoft.ContainerService
+```
 
 ### Basic Deploy (Private Foundry)
 

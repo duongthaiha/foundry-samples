@@ -35,8 +35,8 @@ param modelSkuName string = 'GlobalStandard'
 param modelCapacity int = 30
 
 // Create a short, unique suffix, that will be unique to each resource group
-param deploymentTimestamp string = utcNow('yyyyMMddHHmmss')
-var uniqueSuffix = substring(uniqueString('${resourceGroup().id}-${deploymentTimestamp}'), 0, 4)
+// Uses only resourceGroup().id so the suffix is stable across redeployments
+var uniqueSuffix = substring(uniqueString(resourceGroup().id), 0, 4)
 var accountName = toLower('${aiServices}${uniqueSuffix}')
 
 @description('Name for your project resource.')

@@ -1,5 +1,5 @@
 @description('Location for the project resources.')
-param location string = 'westus'
+param location string
 
 @description('Name of the existing AI Services account')
 param existingAccountName string
