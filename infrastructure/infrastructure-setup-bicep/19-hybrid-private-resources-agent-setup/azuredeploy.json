@@ -5,7 +5,7 @@
     "_generator": {
       "name": "bicep",
       "version": "0.42.1.51946",
-      "templateHash": "2229812475505634325"
+      "templateHash": "2094705040545045466"
     }
   },
   "parameters": {
@@ -57,10 +57,6 @@
       "metadata": {
         "description": "The tokens per minute (TPM) of your model deployment"
       }
-    },
-    "deploymentTimestamp": {
-      "type": "string",
-      "defaultValue": "[utcNow('yyyyMMddHHmmss')]"
     },
     "firstProjectName": {
       "type": "string",
@@ -423,7 +419,7 @@
     }
   },
   "variables": {
-    "uniqueSuffix": "[substring(uniqueString(format('{0}-{1}', resourceGroup().id, parameters('deploymentTimestamp'))), 0, 4)]",
+    "uniqueSuffix": "[substring(uniqueString(resourceGroup().id), 0, 4)]",
     "accountName": "[toLower(format('{0}{1}', parameters('aiServices'), variables('uniqueSuffix')))]",
     "projectName": "[toLower(format('{0}{1}', parameters('firstProjectName'), variables('uniqueSuffix')))]",
     "cosmosDBName": "[toLower(format('{0}{1}cosmosdb', parameters('aiServices'), variables('uniqueSuffix')))]",
@@ -3511,7 +3507,7 @@
             "_generator": {
               "name": "bicep",
               "version": "0.42.1.51946",
-              "templateHash": "6013271290810103316"
+              "templateHash": "10627022964818938294"
             }
           },
           "parameters": {
@@ -3547,14 +3543,6 @@
           },
           "resources": [
             {
-              "type": "Microsoft.CognitiveServices/accounts/capabilityHosts",
-              "apiVersion": "2025-04-01-preview",
-              "name": "[format('{0}/{1}', parameters('accountName'), 'default')]",
-              "properties": {
-                "capabilityHostKind": "Agents"
-              }
-            },
-            {
               "type": "Microsoft.CognitiveServices/accounts/projects/capabilityHosts",
               "apiVersion": "2025-04-01-preview",
               "name": "[format('{0}/{1}/{2}', parameters('accountName'), parameters('projectName'), parameters('projectCapHost'))]",
@@ -3563,10 +3551,7 @@
                 "vectorStoreConnections": "[variables('vectorStoreConnections')]",
                 "storageConnections": "[variables('storageConnections')]",
                 "threadStorageConnections": "[variables('threadConnections')]"
-              },
-              "dependsOn": [
-                "[resourceId('Microsoft.CognitiveServices/accounts/capabilityHosts', parameters('accountName'), 'default')]"
-              ]
+              }
             }
           ],
           "outputs": {
