@@ -5,7 +5,7 @@
     "_generator": {
       "name": "bicep",
       "version": "0.42.1.51946",
-      "templateHash": "12290388783103452707"
+      "templateHash": "16314509114809886658"
     }
   },
   "parameters": {
@@ -4951,7 +4951,10 @@
             "value": "[parameters('teamsCustomDomain')]"
           },
           "botClientId": "[if(parameters('deployTeamsPublishing'), createObject('value', reference(resourceId('Microsoft.Resources/deployments', format('teams-publish-{0}-deployment', variables('uniqueSuffix'))), '2025-04-01').outputs.botClientId.value), createObject('value', ''))]",
-          "activityProtocolUrl": "[if(parameters('deployTeamsPublishing'), createObject('value', reference(resourceId('Microsoft.Resources/deployments', format('teams-publish-{0}-deployment', variables('uniqueSuffix'))), '2025-04-01').outputs.activityProtocolUrl.value), createObject('value', ''))]"
+          "activityProtocolUrl": "[if(parameters('deployTeamsPublishing'), createObject('value', reference(resourceId('Microsoft.Resources/deployments', format('teams-publish-{0}-deployment', variables('uniqueSuffix'))), '2025-04-01').outputs.activityProtocolUrl.value), createObject('value', ''))]",
+          "apimPrivateIp": {
+            "value": ""
+          }
         },
         "template": {
           "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
@@ -4960,7 +4963,7 @@
             "_generator": {
               "name": "bicep",
               "version": "0.42.1.51946",
-              "templateHash": "14049766914239102624"
+              "templateHash": "8924525283310335776"
             }
           },
           "parameters": {
@@ -5040,6 +5043,13 @@
                 "description": "Bot Tenant ID"
               }
             },
+            "apimPrivateIp": {
+              "type": "string",
+              "defaultValue": "",
+              "metadata": {
+                "description": "APIM private endpoint IP address (use private IP instead of FQDN for private APIM)"
+              }
+            },
             "activityProtocolUrl": {
               "type": "string",
               "metadata": {
@@ -5092,6 +5102,67 @@
               }
             },
             {
+              "type": "Microsoft.Resources/deploymentScripts",
+              "apiVersion": "2023-08-01",
+              "name": "[format('{0}-cert-script', variables('finalKeyVaultName'))]",
+              "location": "[parameters('location')]",
+              "kind": "AzurePowerShell",
+              "identity": {
+                "type": "UserAssigned",
+                "userAssignedIdentities": {
+                  "[format('{0}', resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', format('{0}-identity', variables('appGwName'))))]": {}
+                }
+              },
+              "properties": {
+                "azPowerShellVersion": "12.0",
+                "retentionInterval": "PT1H",
+                "timeout": "PT5M",
+                "environmentVariables": [
+                  {
+                    "name": "KV_NAME",
+                    "value": "[variables('finalKeyVaultName')]"
+                  },
+                  {
+                    "name": "CERT_NAME",
+                    "value": "[parameters('tlsCertName')]"
+                  },
+                  {
+                    "name": "DOMAIN",
+                    "value": "[parameters('customDomain')]"
+                  }
+                ],
+                "scriptContent": "      $ErrorActionPreference = 'Stop'\n      $policy = New-AzKeyVaultCertificatePolicy -SubjectName \"CN=$($env:DOMAIN)\" -IssuerName Self -ValidityInMonths 12 -SecretContentType 'application/x-pkcs12'\n      try {\n        $existing = Get-AzKeyVaultCertificate -VaultName $env:KV_NAME -Name $env:CERT_NAME -ErrorAction SilentlyContinue\n        if ($existing) {\n          Write-Host \"Certificate already exists, skipping creation\"\n        } else {\n          Add-AzKeyVaultCertificate -VaultName $env:KV_NAME -Name $env:CERT_NAME -CertificatePolicy $policy\n          Write-Host \"Self-signed certificate created (placeholder — replace with CA cert for production)\"\n        }\n      } catch {\n        Write-Host \"Certificate creation skipped: $_\"\n      }\n      $DeploymentScriptOutputs = @{ certName = $env:CERT_NAME }\n    "
+              },
+              "dependsOn": [
+                "[resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', format('{0}-identity', variables('appGwName')))]",
+                "[extensionResourceId(resourceId('Microsoft.KeyVault/vaults', variables('finalKeyVaultName')), 'Microsoft.Authorization/roleAssignments', guid(resourceId('Microsoft.KeyVault/vaults', variables('finalKeyVaultName')), resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', format('{0}-identity', variables('appGwName'))), '4633458b-17de-408a-b874-0445c86b69e6'))]",
+                "[resourceId('Microsoft.KeyVault/vaults', variables('finalKeyVaultName'))]"
+              ]
+            },
+            {
+              "type": "Microsoft.Network/ApplicationGatewayWebApplicationFirewallPolicies",
+              "apiVersion": "2024-05-01",
+              "name": "[format('{0}-waf-policy', variables('appGwName'))]",
+              "location": "[parameters('location')]",
+              "properties": {
+                "policySettings": {
+                  "requestBodyCheck": true,
+                  "maxRequestBodySizeInKb": 128,
+                  "fileUploadLimitInMb": 100,
+                  "state": "Enabled",
+                  "mode": "Prevention"
+                },
+                "managedRules": {
+                  "managedRuleSets": [
+                    {
+                      "ruleSetType": "OWASP",
+                      "ruleSetVersion": "3.2"
+                    }
+                  ]
+                }
+              }
+            },
+            {
               "type": "Microsoft.ManagedIdentity/userAssignedIdentities",
               "apiVersion": "2023-01-31",
               "name": "[format('{0}-identity', variables('appGwName'))]",
@@ -5129,6 +5200,24 @@
                   "tier": "WAF_v2",
                   "capacity": 1
                 },
+                "probes": [
+                  {
+                    "name": "apim-health-probe",
+                    "properties": {
+                      "protocol": "Https",
+                      "host": "[format('{0}.azure-api.net', parameters('apimName'))]",
+                      "path": "/status-0123456789abcdef",
+                      "interval": 30,
+                      "timeout": 30,
+                      "unhealthyThreshold": 3,
+                      "match": {
+                        "statusCodes": [
+                          "200-404"
+                        ]
+                      }
+                    }
+                  }
+                ],
                 "gatewayIPConfigurations": [
                   {
                     "name": "appGwIpConfig",
@@ -5162,9 +5251,7 @@
                     "name": "apim-backend",
                     "properties": {
                       "backendAddresses": [
-                        {
-                          "fqdn": "[format('{0}.azure-api.net', parameters('apimName'))]"
-                        }
+                        "[if(not(empty(parameters('apimPrivateIp'))), createObject('ipAddress', parameters('apimPrivateIp')), createObject('fqdn', format('{0}.azure-api.net', parameters('apimName'))))]"
                       ]
                     }
                   }
@@ -5177,7 +5264,11 @@
                       "protocol": "Https",
                       "cookieBasedAffinity": "Disabled",
                       "requestTimeout": 60,
-                      "pickHostNameFromBackendAddress": true
+                      "hostName": "[format('{0}.azure-api.net', parameters('apimName'))]",
+                      "pickHostNameFromBackendAddress": false,
+                      "probe": {
+                        "id": "[resourceId('Microsoft.Network/applicationGateways/probes', variables('appGwName'), 'apim-health-probe')]"
+                      }
                     }
                   }
                 ],
@@ -5230,6 +5321,9 @@
                   "firewallMode": "Prevention",
                   "ruleSetType": "OWASP",
                   "ruleSetVersion": "3.2"
+                },
+                "firewallPolicy": {
+                  "id": "[resourceId('Microsoft.Network/ApplicationGatewayWebApplicationFirewallPolicies', format('{0}-waf-policy', variables('appGwName')))]"
                 }
               },
               "dependsOn": [
@@ -5237,7 +5331,9 @@
                 "[extensionResourceId(resourceId('Microsoft.KeyVault/vaults', variables('finalKeyVaultName')), 'Microsoft.Authorization/roleAssignments', guid(resourceId('Microsoft.KeyVault/vaults', variables('finalKeyVaultName')), resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', format('{0}-identity', variables('appGwName'))), '4633458b-17de-408a-b874-0445c86b69e6'))]",
                 "[resourceId('Microsoft.Network/publicIPAddresses', variables('appGwPipName'))]",
                 "[resourceId('Microsoft.Network/virtualNetworks/subnets', parameters('vnetName'), 'appgw-subnet')]",
-                "[resourceId('Microsoft.KeyVault/vaults', variables('finalKeyVaultName'))]"
+                "[resourceId('Microsoft.Resources/deploymentScripts', format('{0}-cert-script', variables('finalKeyVaultName')))]",
+                "[resourceId('Microsoft.KeyVault/vaults', variables('finalKeyVaultName'))]",
+                "[resourceId('Microsoft.Network/ApplicationGatewayWebApplicationFirewallPolicies', format('{0}-waf-policy', variables('appGwName')))]"
               ]
             },
             {
@@ -5273,7 +5369,7 @@
               "name": "[format('{0}/{1}/{2}', parameters('apimName'), 'bot-messaging', 'policy')]",
               "properties": {
                 "format": "xml",
-                "value": "[format('<policies><inbound><validate-jwt header-name=\"Authorization\" require-scheme=\"Bearer\" failed-validation-httpcode=\"401\" failed-validation-error-message=\"Unauthorized - Invalid Bot token\"><openid-config url=\"https://login.botframework.com/v1/.well-known/openidconfiguration\" /><audiences><audience>{0}</audience></audiences><issuers><issuer>https://api.botframework.com</issuer></issuers></validate-jwt><base /></inbound><backend><base /></backend><outbound><base /></outbound><on-error><base /></on-error></policies>', parameters('botClientId'))]"
+                "value": "[format('<policies><inbound><rewrite-uri template=\"/?api-version=2025-11-15-preview\" copy-unmatched-params=\"false\" /><validate-jwt header-name=\"Authorization\" require-scheme=\"Bearer\" failed-validation-httpcode=\"401\" failed-validation-error-message=\"Unauthorized - Invalid Bot token\"><openid-config url=\"https://login.botframework.com/v1/.well-known/openidconfiguration\" /><audiences><audience>{0}</audience></audiences><issuers><issuer>https://api.botframework.com</issuer></issuers></validate-jwt><base /></inbound><backend><base /></backend><outbound><base /></outbound><on-error><base /></on-error></policies>', parameters('botClientId'))]"
               },
               "dependsOn": [
                 "[resourceId('Microsoft.ApiManagement/service/apis', parameters('apimName'), 'bot-messaging')]"
