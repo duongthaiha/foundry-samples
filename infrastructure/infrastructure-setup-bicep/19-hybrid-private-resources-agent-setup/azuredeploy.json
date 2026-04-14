@@ -5,39 +5,13 @@
     "_generator": {
       "name": "bicep",
       "version": "0.42.1.51946",
-      "templateHash": "5720017680671096172"
+      "templateHash": "2229812475505634325"
     }
   },
   "parameters": {
     "location": {
       "type": "string",
       "defaultValue": "eastus2",
-      "allowedValues": [
-        "westus",
-        "westus2",
-        "eastus",
-        "eastus2",
-        "japaneast",
-        "francecentral",
-        "spaincentral",
-        "uaenorth",
-        "southcentralus",
-        "italynorth",
-        "germanywestcentral",
-        "brazilsouth",
-        "southafricanorth",
-        "australiaeast",
-        "swedencentral",
-        "canadaeast",
-        "westeurope",
-        "westus3",
-        "uksouth",
-        "southindia",
-        "koreacentral",
-        "polandcentral",
-        "switzerlandnorth",
-        "norwayeast"
-      ],
       "metadata": {
         "description": "Location for all resources."
       }
@@ -347,9 +321,9 @@
     },
     "crossRegionLocation": {
       "type": "string",
-      "defaultValue": "westus",
+      "defaultValue": "",
       "metadata": {
-        "description": "Azure region for the cross-region Azure OpenAI resource"
+        "description": "Azure region for the cross-region Azure OpenAI resource (required when deployCrossRegionOpenAI is true)"
       }
     },
     "crossRegionModelName": {
@@ -4465,13 +4439,12 @@
             "_generator": {
               "name": "bicep",
               "version": "0.42.1.51946",
-              "templateHash": "5890920204839190065"
+              "templateHash": "13635089898951472172"
             }
           },
           "parameters": {
             "location": {
               "type": "string",
-              "defaultValue": "westus",
               "metadata": {
                 "description": "Azure region for the cross-region OpenAI resource"
               }
@@ -4537,16 +4510,16 @@
             },
             "apimApiName": {
               "type": "string",
-              "defaultValue": "azure-openai-crossregion",
+              "defaultValue": "",
               "metadata": {
-                "description": "Name for the APIM API"
+                "description": "Name for the APIM API (defaults to azure-openai-{location})"
               }
             },
             "connectionName": {
               "type": "string",
-              "defaultValue": "apim-gateway-crossregion",
+              "defaultValue": "",
               "metadata": {
-                "description": "Name for the gateway connection on the project"
+                "description": "Name for the gateway connection on the project (defaults to apim-gateway-{location})"
               }
             },
             "inferenceApiVersion": {
@@ -4588,6 +4561,8 @@
           "variables": {
             "finalCustomDomain": "[if(not(empty(parameters('customSubDomainName'))), parameters('customSubDomainName'), parameters('openAIName'))]",
             "createPrivateEndpoint": "[not(empty(parameters('vnetName')))]",
+            "finalApimApiName": "[if(not(empty(parameters('apimApiName'))), parameters('apimApiName'), format('azure-openai-{0}', parameters('location')))]",
+            "finalConnectionName": "[if(not(empty(parameters('connectionName'))), parameters('connectionName'), format('apim-gateway-{0}', parameters('location')))]",
             "staticModels": [
               {
                 "name": "[parameters('modelName')]",
@@ -4652,7 +4627,7 @@
             {
               "type": "Microsoft.ApiManagement/service/apis",
               "apiVersion": "2024-05-01",
-              "name": "[format('{0}/{1}', parameters('apimName'), parameters('apimApiName'))]",
+              "name": "[format('{0}/{1}', parameters('apimName'), variables('finalApimApiName'))]",
               "properties": {
                 "displayName": "[format('Azure OpenAI {0}', parameters('location'))]",
                 "path": "[format('openai-{0}', parameters('location'))]",
@@ -4668,13 +4643,13 @@
             {
               "type": "Microsoft.ApiManagement/service/apis/policies",
               "apiVersion": "2024-05-01",
-              "name": "[format('{0}/{1}/{2}', parameters('apimName'), parameters('apimApiName'), 'policy')]",
+              "name": "[format('{0}/{1}/{2}', parameters('apimName'), variables('finalApimApiName'), 'policy')]",
               "properties": {
                 "format": "xml",
                 "value": "<policies><inbound><base /><authentication-managed-identity resource=\"https://cognitiveservices.azure.com/\" /></inbound><backend><base /></backend><outbound><base /></outbound><on-error><base /></on-error></policies>"
               },
               "dependsOn": [
-                "[resourceId('Microsoft.ApiManagement/service/apis', parameters('apimName'), parameters('apimApiName'))]"
+                "[resourceId('Microsoft.ApiManagement/service/apis', parameters('apimName'), variables('finalApimApiName'))]"
               ]
             },
             {
@@ -4725,10 +4700,10 @@
             {
               "type": "Microsoft.CognitiveServices/accounts/projects/connections",
               "apiVersion": "2025-04-01-preview",
-              "name": "[format('{0}/{1}/{2}', parameters('accountName'), parameters('projectName'), parameters('connectionName'))]",
+              "name": "[format('{0}/{1}/{2}', parameters('accountName'), parameters('projectName'), variables('finalConnectionName'))]",
               "properties": {
                 "category": "ApiManagement",
-                "target": "[format('{0}/{1}', reference(resourceId('Microsoft.ApiManagement/service', parameters('apimName')), '2024-05-01').gatewayUrl, reference(resourceId('Microsoft.ApiManagement/service/apis', parameters('apimName'), parameters('apimApiName')), '2024-05-01').path)]",
+                "target": "[format('{0}/{1}', reference(resourceId('Microsoft.ApiManagement/service', parameters('apimName')), '2024-05-01').gatewayUrl, reference(resourceId('Microsoft.ApiManagement/service/apis', parameters('apimName'), variables('finalApimApiName')), '2024-05-01').path)]",
                 "authType": "ApiKey",
                 "isSharedToAll": true,
                 "credentials": {
@@ -4741,8 +4716,8 @@
                 }
               },
               "dependsOn": [
-                "[resourceId('Microsoft.ApiManagement/service/apis', parameters('apimName'), parameters('apimApiName'))]",
-                "[resourceId('Microsoft.ApiManagement/service/apis/policies', parameters('apimName'), parameters('apimApiName'), 'policy')]",
+                "[resourceId('Microsoft.ApiManagement/service/apis', parameters('apimName'), variables('finalApimApiName'))]",
+                "[resourceId('Microsoft.ApiManagement/service/apis/policies', parameters('apimName'), variables('finalApimApiName'), 'policy')]",
                 "[extensionResourceId(resourceId('Microsoft.CognitiveServices/accounts', parameters('openAIName')), 'Microsoft.Authorization/roleAssignments', guid(resourceId('Microsoft.CognitiveServices/accounts', parameters('openAIName')), resourceId('Microsoft.ApiManagement/service', parameters('apimName')), '5e0bd9bd-7b93-4f28-af87-19fc36ad61bd'))]",
                 "[resourceId('Microsoft.CognitiveServices/accounts/deployments', parameters('openAIName'), parameters('modelName'))]"
               ]
@@ -4759,7 +4734,7 @@
             },
             "connectionName": {
               "type": "string",
-              "value": "[parameters('connectionName')]"
+              "value": "[variables('finalConnectionName')]"
             },
             "modelDeploymentName": {
               "type": "string",
@@ -4767,7 +4742,7 @@
             },
             "apimApiPath": {
               "type": "string",
-              "value": "[reference(resourceId('Microsoft.ApiManagement/service/apis', parameters('apimName'), parameters('apimApiName')), '2024-05-01').path]"
+              "value": "[reference(resourceId('Microsoft.ApiManagement/service/apis', parameters('apimName'), variables('finalApimApiName')), '2024-05-01').path]"
             }
           }
         }
