@@ -5,7 +5,7 @@
     "_generator": {
       "name": "bicep",
       "version": "0.42.1.51946",
-      "templateHash": "16314509114809886658"
+      "templateHash": "5720017680671096172"
     }
   },
   "parameters": {
@@ -309,6 +309,35 @@
         "description": "Admin password for the jump box VM (required when deployBastion is true)"
       }
     },
+    "deployVpnGateway": {
+      "type": "bool",
+      "defaultValue": false,
+      "metadata": {
+        "description": "Set to true to deploy a VPN Gateway for site-to-site or point-to-site connectivity to the private VNet."
+      }
+    },
+    "gatewaySubnetPrefix": {
+      "type": "string",
+      "defaultValue": "192.168.255.0/27",
+      "metadata": {
+        "description": "Address prefix for GatewaySubnet (minimum /27)"
+      }
+    },
+    "vpnGatewaySku": {
+      "type": "string",
+      "defaultValue": "VpnGw1",
+      "allowedValues": [
+        "VpnGw1",
+        "VpnGw2",
+        "VpnGw3",
+        "VpnGw1AZ",
+        "VpnGw2AZ",
+        "VpnGw3AZ"
+      ],
+      "metadata": {
+        "description": "SKU for the VPN Gateway"
+      }
+    },
     "deployCrossRegionOpenAI": {
       "type": "bool",
       "defaultValue": false,
@@ -467,6 +496,13 @@
   },
   "resources": [
     {
+      "condition": "[parameters('deployApiManagement')]",
+      "type": "Microsoft.Network/networkSecurityGroups",
+      "apiVersion": "2024-05-01",
+      "name": "[format('{0}-{1}-nsg-{2}', variables('trimVnetName'), parameters('apimSubnetName'), parameters('location'))]",
+      "location": "[parameters('location')]"
+    },
+    {
       "type": "Microsoft.Resources/deployments",
       "apiVersion": "2025-04-01",
       "name": "[format('vnet-{0}-{1}-deployment', variables('trimVnetName'), variables('uniqueSuffix'))]",
@@ -520,7 +556,7 @@
             "_generator": {
               "name": "bicep",
               "version": "0.42.1.51946",
-              "templateHash": "17034987495956626535"
+              "templateHash": "5383973820623921490"
             }
           },
           "parameters": {
@@ -870,7 +906,7 @@
                     "_generator": {
                       "name": "bicep",
                       "version": "0.42.1.51946",
-                      "templateHash": "818496926714344920"
+                      "templateHash": "16831488021130823101"
                     }
                   },
                   "parameters": {
@@ -974,7 +1010,7 @@
                             "_generator": {
                               "name": "bicep",
                               "version": "0.42.1.51946",
-                              "templateHash": "8293031405760656222"
+                              "templateHash": "11628010471372017184"
                             }
                           },
                           "parameters": {
@@ -1002,6 +1038,13 @@
                               "metadata": {
                                 "description": "Array of subnet delegations"
                               }
+                            },
+                            "networkSecurityGroupId": {
+                              "type": "string",
+                              "defaultValue": "",
+                              "metadata": {
+                                "description": "Network Security Group ID to associate (optional)"
+                              }
                             }
                           },
                           "resources": [
@@ -1011,7 +1054,8 @@
                               "name": "[format('{0}/{1}', parameters('vnetName'), parameters('subnetName'))]",
                               "properties": {
                                 "addressPrefix": "[parameters('addressPrefix')]",
-                                "delegations": "[parameters('delegations')]"
+                                "delegations": "[parameters('delegations')]",
+                                "networkSecurityGroup": "[if(not(empty(parameters('networkSecurityGroupId'))), createObject('id', parameters('networkSecurityGroupId')), null())]"
                               }
                             }
                           ],
@@ -1057,7 +1101,7 @@
                             "_generator": {
                               "name": "bicep",
                               "version": "0.42.1.51946",
-                              "templateHash": "8293031405760656222"
+                              "templateHash": "11628010471372017184"
                             }
                           },
                           "parameters": {
@@ -1085,6 +1129,13 @@
                               "metadata": {
                                 "description": "Array of subnet delegations"
                               }
+                            },
+                            "networkSecurityGroupId": {
+                              "type": "string",
+                              "defaultValue": "",
+                              "metadata": {
+                                "description": "Network Security Group ID to associate (optional)"
+                              }
                             }
                           },
                           "resources": [
@@ -1094,7 +1145,8 @@
                               "name": "[format('{0}/{1}', parameters('vnetName'), parameters('subnetName'))]",
                               "properties": {
                                 "addressPrefix": "[parameters('addressPrefix')]",
-                                "delegations": "[parameters('delegations')]"
+                                "delegations": "[parameters('delegations')]",
+                                "networkSecurityGroup": "[if(not(empty(parameters('networkSecurityGroupId'))), createObject('id', parameters('networkSecurityGroupId')), null())]"
                               }
                             }
                           ],
@@ -1147,7 +1199,7 @@
                             "_generator": {
                               "name": "bicep",
                               "version": "0.42.1.51946",
-                              "templateHash": "8293031405760656222"
+                              "templateHash": "11628010471372017184"
                             }
                           },
                           "parameters": {
@@ -1175,6 +1227,13 @@
                               "metadata": {
                                 "description": "Array of subnet delegations"
                               }
+                            },
+                            "networkSecurityGroupId": {
+                              "type": "string",
+                              "defaultValue": "",
+                              "metadata": {
+                                "description": "Network Security Group ID to associate (optional)"
+                              }
                             }
                           },
                           "resources": [
@@ -1184,7 +1243,8 @@
                               "name": "[format('{0}/{1}', parameters('vnetName'), parameters('subnetName'))]",
                               "properties": {
                                 "addressPrefix": "[parameters('addressPrefix')]",
-                                "delegations": "[parameters('delegations')]"
+                                "delegations": "[parameters('delegations')]",
+                                "networkSecurityGroup": "[if(not(empty(parameters('networkSecurityGroupId'))), createObject('id', parameters('networkSecurityGroupId')), null())]"
                               }
                             }
                           ],
@@ -1314,6 +1374,7 @@
           "addressPrefix": {
             "value": "[variables('resolvedApimSubnetPrefix')]"
           },
+          "networkSecurityGroupId": "[if(parameters('deployApiManagement'), createObject('value', resourceId('Microsoft.Network/networkSecurityGroups', format('{0}-{1}-nsg-{2}', variables('trimVnetName'), parameters('apimSubnetName'), parameters('location')))), createObject('value', ''))]",
           "delegations": {
             "value": [
               {
@@ -1332,7 +1393,7 @@
             "_generator": {
               "name": "bicep",
               "version": "0.42.1.51946",
-              "templateHash": "8293031405760656222"
+              "templateHash": "11628010471372017184"
             }
           },
           "parameters": {
@@ -1360,6 +1421,13 @@
               "metadata": {
                 "description": "Array of subnet delegations"
               }
+            },
+            "networkSecurityGroupId": {
+              "type": "string",
+              "defaultValue": "",
+              "metadata": {
+                "description": "Network Security Group ID to associate (optional)"
+              }
             }
           },
           "resources": [
@@ -1369,7 +1437,8 @@
               "name": "[format('{0}/{1}', parameters('vnetName'), parameters('subnetName'))]",
               "properties": {
                 "addressPrefix": "[parameters('addressPrefix')]",
-                "delegations": "[parameters('delegations')]"
+                "delegations": "[parameters('delegations')]",
+                "networkSecurityGroup": "[if(not(empty(parameters('networkSecurityGroupId'))), createObject('id', parameters('networkSecurityGroupId')), null())]"
               }
             }
           ],
@@ -1386,6 +1455,7 @@
         }
       },
       "dependsOn": [
+        "[resourceId('Microsoft.Network/networkSecurityGroups', format('{0}-{1}-nsg-{2}', variables('trimVnetName'), parameters('apimSubnetName'), parameters('location')))]",
         "[resourceId('Microsoft.Resources/deployments', format('vnet-{0}-{1}-deployment', variables('trimVnetName'), variables('uniqueSuffix')))]"
       ]
     },
@@ -3467,7 +3537,7 @@
             "_generator": {
               "name": "bicep",
               "version": "0.42.1.51946",
-              "templateHash": "10627022964818938294"
+              "templateHash": "6013271290810103316"
             }
           },
           "parameters": {
@@ -3503,6 +3573,14 @@
           },
           "resources": [
             {
+              "type": "Microsoft.CognitiveServices/accounts/capabilityHosts",
+              "apiVersion": "2025-04-01-preview",
+              "name": "[format('{0}/{1}', parameters('accountName'), 'default')]",
+              "properties": {
+                "capabilityHostKind": "Agents"
+              }
+            },
+            {
               "type": "Microsoft.CognitiveServices/accounts/projects/capabilityHosts",
               "apiVersion": "2025-04-01-preview",
               "name": "[format('{0}/{1}/{2}', parameters('accountName'), parameters('projectName'), parameters('projectCapHost'))]",
@@ -3511,7 +3589,10 @@
                 "vectorStoreConnections": "[variables('vectorStoreConnections')]",
                 "storageConnections": "[variables('storageConnections')]",
                 "threadStorageConnections": "[variables('threadConnections')]"
-              }
+              },
+              "dependsOn": [
+                "[resourceId('Microsoft.CognitiveServices/accounts/capabilityHosts', parameters('accountName'), 'default')]"
+              ]
             }
           ],
           "outputs": {
@@ -3724,7 +3805,7 @@
             "_generator": {
               "name": "bicep",
               "version": "0.42.1.51946",
-              "templateHash": "14795874568256822319"
+              "templateHash": "14698027320938784451"
             }
           },
           "parameters": {
@@ -3820,7 +3901,30 @@
                 "format": "openapi-link",
                 "value": "[format('https://raw.githubusercontent.com/Azure/azure-rest-api-specs/main/specification/cognitiveservices/data-plane/AzureOpenAI/inference/stable/{0}/inference.json', parameters('inferenceApiVersion'))]",
                 "serviceUrl": "[format('{0}/openai', parameters('aiServicesEndpoint'))]",
-                "subscriptionRequired": true
+                "subscriptionRequired": false
+              }
+            },
+            {
+              "type": "Microsoft.ApiManagement/service/apis/policies",
+              "apiVersion": "2024-05-01",
+              "name": "[format('{0}/{1}/{2}', parameters('apimName'), parameters('apimApiName'), 'policy')]",
+              "properties": {
+                "format": "xml",
+                "value": "<policies><inbound><base /><authentication-managed-identity resource=\"https://cognitiveservices.azure.com/\" /></inbound><backend><base /></backend><outbound><base /></outbound><on-error><base /></on-error></policies>"
+              },
+              "dependsOn": [
+                "[resourceId('Microsoft.ApiManagement/service/apis', parameters('apimName'), parameters('apimApiName'))]"
+              ]
+            },
+            {
+              "type": "Microsoft.Authorization/roleAssignments",
+              "apiVersion": "2022-04-01",
+              "scope": "[resourceId('Microsoft.CognitiveServices/accounts', parameters('accountName'))]",
+              "name": "[guid(resourceId('Microsoft.CognitiveServices/accounts', parameters('accountName')), resourceId('Microsoft.ApiManagement/service', parameters('apimName')), '5e0bd9bd-7b93-4f28-af87-19fc36ad61bd')]",
+              "properties": {
+                "principalId": "[reference(resourceId('Microsoft.ApiManagement/service', parameters('apimName')), '2024-05-01', 'full').identity.principalId]",
+                "principalType": "ServicePrincipal",
+                "roleDefinitionId": "[subscriptionResourceId('Microsoft.Authorization/roleDefinitions', '5e0bd9bd-7b93-4f28-af87-19fc36ad61bd')]"
               }
             },
             {
@@ -4145,6 +4249,167 @@
             "vmPrivateIp": {
               "type": "string",
               "value": "[reference(resourceId('Microsoft.Network/networkInterfaces', format('{0}-nic', parameters('vmName'))), '2024-05-01').ipConfigurations[0].properties.privateIPAddress]"
+            }
+          }
+        }
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.Resources/deployments', format('vnet-{0}-{1}-deployment', variables('trimVnetName'), variables('uniqueSuffix')))]"
+      ]
+    },
+    {
+      "condition": "[parameters('deployVpnGateway')]",
+      "type": "Microsoft.Resources/deployments",
+      "apiVersion": "2025-04-01",
+      "name": "[format('vpn-gateway-{0}-deployment', variables('uniqueSuffix'))]",
+      "properties": {
+        "expressionEvaluationOptions": {
+          "scope": "inner"
+        },
+        "mode": "Incremental",
+        "parameters": {
+          "location": {
+            "value": "[parameters('location')]"
+          },
+          "vnetName": {
+            "value": "[reference(resourceId('Microsoft.Resources/deployments', format('vnet-{0}-{1}-deployment', variables('trimVnetName'), variables('uniqueSuffix'))), '2025-04-01').outputs.virtualNetworkName.value]"
+          },
+          "gatewaySubnetPrefix": {
+            "value": "[parameters('gatewaySubnetPrefix')]"
+          },
+          "gatewaySku": {
+            "value": "[parameters('vpnGatewaySku')]"
+          }
+        },
+        "template": {
+          "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+          "contentVersion": "1.0.0.0",
+          "metadata": {
+            "_generator": {
+              "name": "bicep",
+              "version": "0.42.1.51946",
+              "templateHash": "15523537751580612016"
+            }
+          },
+          "parameters": {
+            "location": {
+              "type": "string",
+              "metadata": {
+                "description": "Azure region for the deployment"
+              }
+            },
+            "vnetName": {
+              "type": "string",
+              "metadata": {
+                "description": "VNet name to deploy the gateway into"
+              }
+            },
+            "gatewaySubnetPrefix": {
+              "type": "string",
+              "defaultValue": "192.168.255.0/27",
+              "metadata": {
+                "description": "Address prefix for GatewaySubnet (minimum /27)"
+              }
+            },
+            "gatewayName": {
+              "type": "string",
+              "defaultValue": "vpn-gateway",
+              "metadata": {
+                "description": "Name for the VPN Gateway"
+              }
+            },
+            "gatewaySku": {
+              "type": "string",
+              "defaultValue": "VpnGw1",
+              "allowedValues": [
+                "VpnGw1",
+                "VpnGw2",
+                "VpnGw3",
+                "VpnGw1AZ",
+                "VpnGw2AZ",
+                "VpnGw3AZ"
+              ],
+              "metadata": {
+                "description": "SKU for the VPN Gateway"
+              }
+            },
+            "vpnType": {
+              "type": "string",
+              "defaultValue": "RouteBased",
+              "allowedValues": [
+                "RouteBased",
+                "PolicyBased"
+              ],
+              "metadata": {
+                "description": "VPN type"
+              }
+            }
+          },
+          "resources": [
+            {
+              "type": "Microsoft.Network/virtualNetworks/subnets",
+              "apiVersion": "2024-05-01",
+              "name": "[format('{0}/{1}', parameters('vnetName'), 'GatewaySubnet')]",
+              "properties": {
+                "addressPrefix": "[parameters('gatewaySubnetPrefix')]"
+              }
+            },
+            {
+              "type": "Microsoft.Network/publicIPAddresses",
+              "apiVersion": "2024-05-01",
+              "name": "[format('{0}-pip', parameters('gatewayName'))]",
+              "location": "[parameters('location')]",
+              "sku": {
+                "name": "Standard"
+              },
+              "properties": {
+                "publicIPAllocationMethod": "Static"
+              }
+            },
+            {
+              "type": "Microsoft.Network/virtualNetworkGateways",
+              "apiVersion": "2024-05-01",
+              "name": "[parameters('gatewayName')]",
+              "location": "[parameters('location')]",
+              "properties": {
+                "gatewayType": "Vpn",
+                "vpnType": "[parameters('vpnType')]",
+                "sku": {
+                  "name": "[parameters('gatewaySku')]",
+                  "tier": "[parameters('gatewaySku')]"
+                },
+                "ipConfigurations": [
+                  {
+                    "name": "vnetGatewayConfig0",
+                    "properties": {
+                      "publicIPAddress": {
+                        "id": "[resourceId('Microsoft.Network/publicIPAddresses', format('{0}-pip', parameters('gatewayName')))]"
+                      },
+                      "subnet": {
+                        "id": "[resourceId('Microsoft.Network/virtualNetworks/subnets', parameters('vnetName'), 'GatewaySubnet')]"
+                      }
+                    }
+                  }
+                ]
+              },
+              "dependsOn": [
+                "[resourceId('Microsoft.Network/publicIPAddresses', format('{0}-pip', parameters('gatewayName')))]",
+                "[resourceId('Microsoft.Network/virtualNetworks/subnets', parameters('vnetName'), 'GatewaySubnet')]"
+              ]
+            }
+          ],
+          "outputs": {
+            "gatewayName": {
+              "type": "string",
+              "value": "[parameters('gatewayName')]"
+            },
+            "gatewayId": {
+              "type": "string",
+              "value": "[resourceId('Microsoft.Network/virtualNetworkGateways', parameters('gatewayName'))]"
+            },
+            "publicIpAddress": {
+              "type": "string",
+              "value": "[reference(resourceId('Microsoft.Network/publicIPAddresses', format('{0}-pip', parameters('gatewayName'))), '2024-05-01').ipAddress]"
             }
           }
         }
