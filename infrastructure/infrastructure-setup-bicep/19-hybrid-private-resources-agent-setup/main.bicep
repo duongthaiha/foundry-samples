@@ -17,34 +17,6 @@ Architecture:
   Private VNet → AI Services (private) → Data Proxy → Private VNet → Backend Resources
 */
 @description('Location for all resources.')
-@allowed([
-  'westus'
-  'westus2'
-  'eastus'
-  'eastus2'
-  'japaneast'
-  'francecentral'
-  'spaincentral'
-  'uaenorth'
-  'southcentralus'
-  'italynorth'
-  'germanywestcentral'
-  'brazilsouth'
-  'southafricanorth'
-  'australiaeast'
-  'swedencentral'
-  'canadaeast'
-  'westeurope'
-  'westus3'
-  'uksouth'
-  'southindia'
-
-  //only class B and C
-  'koreacentral'
-  'polandcentral'
-  'switzerlandnorth'
-  'norwayeast'
-])
 param location string = 'eastus2'
 
 @description('Name for your AI Services resource.')
@@ -185,8 +157,8 @@ param vpnGatewaySku string = 'VpnGw1'
 @description('Set to true to deploy an Azure OpenAI resource in a different region and connect it to the Foundry account.')
 param deployCrossRegionOpenAI bool = false
 
-@description('Azure region for the cross-region Azure OpenAI resource')
-param crossRegionLocation string = 'westus'
+@description('Azure region for the cross-region Azure OpenAI resource (required when deployCrossRegionOpenAI is true)')
+param crossRegionLocation string = ''
 
 @description('Model name to deploy in the cross-region OpenAI resource')
 param crossRegionModelName string = 'gpt-4o'

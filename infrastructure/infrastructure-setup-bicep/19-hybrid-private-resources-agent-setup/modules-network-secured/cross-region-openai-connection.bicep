@@ -12,7 +12,7 @@ The APIM gateway approach is required because:
 */
 
 @description('Azure region for the cross-region OpenAI resource')
-param location string = 'westus'
+param location string
 
 @description('Name of the AI Foundry account to connect to')
 param accountName string
@@ -43,11 +43,11 @@ param modelCapacity int = 30
 @description('Name of the APIM service to route through')
 param apimName string
 
-@description('Name for the APIM API')
-param apimApiName string = 'azure-openai-crossregion'
+@description('Name for the APIM API (defaults to azure-openai-{location})')
+param apimApiName string = ''
 
-@description('Name for the gateway connection on the project')
-param connectionName string = 'apim-gateway-crossregion'
+@description('Name for the gateway connection on the project (defaults to apim-gateway-{location})')
+param connectionName string = ''
 
 @description('API version for inference calls')
 param inferenceApiVersion string = '2024-10-21'
@@ -68,6 +68,8 @@ param vnetResourceGroupName string = resourceGroup().name
 // Derived variables
 var finalCustomDomain = !empty(customSubDomainName) ? customSubDomainName : openAIName
 var createPrivateEndpoint = !empty(vnetName)
+var finalApimApiName = !empty(apimApiName) ? apimApiName : 'azure-openai-${location}'
+var finalConnectionName = !empty(connectionName) ? connectionName : 'apim-gateway-${location}'
 
 // ---- Azure OpenAI Resource ----
 resource openAI 'Microsoft.CognitiveServices/accounts@2025-04-01-preview' = {
@@ -118,7 +120,7 @@ resource apimRoleAssignment 'Microsoft.Authorization/roleAssignments@2022-04-01'
 
 // ---- APIM API pointing to cross-region backend ----
 resource apimApi 'Microsoft.ApiManagement/service/apis@2024-05-01' = {
-  name: apimApiName
+  name: finalApimApiName
   parent: apimService
   properties: {
     displayName: 'Azure OpenAI ${location}'
@@ -214,7 +216,7 @@ var staticModels = [
 ]
 
 resource gatewayConnection 'Microsoft.CognitiveServices/accounts/projects/connections@2025-04-01-preview' = {
-  name: connectionName
+  name: finalConnectionName
   parent: project
   properties: {
     category: 'ApiManagement'

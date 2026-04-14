@@ -43,7 +43,7 @@ param deployVpnGateway = false
 
 // Cross-region Azure OpenAI connection
 param deployCrossRegionOpenAI = false
-param crossRegionLocation = 'westus'
+param crossRegionLocation = '' // Set to target region (e.g., 'westus') when deployCrossRegionOpenAI is true
 param crossRegionModelName = 'gpt-4o'
 
 // Workflow deployment

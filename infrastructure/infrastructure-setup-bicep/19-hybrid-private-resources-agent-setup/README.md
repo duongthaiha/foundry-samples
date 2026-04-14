@@ -326,7 +326,7 @@ defaultAction: 'Deny'
 | `apimModelDeployments` | Static model list for gateway | Uses template model |
 | **Cross-Region** | | |
 | `deployCrossRegionOpenAI` | Deploy OpenAI in different region | `false` |
-| `crossRegionLocation` | Region for cross-region OpenAI | `westus` |
+| `crossRegionLocation` | Region for cross-region OpenAI | (required if deployed) |
 | `crossRegionModelName` | Cross-region model to deploy | `gpt-4o` |
 | `crossRegionModelVersion` | Cross-region model version | `2024-11-20` |
 | **Workflow** | | |
