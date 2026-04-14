@@ -57,6 +57,7 @@ See [diagrams/architecture.md](diagrams/architecture.md) for the full Mermaid in
 | **Cross-region OpenAI** | Access models in different regions via APIM gateway + private endpoints |
 | **Application Insights** | Agent tracing and observability with Log Analytics |
 | **Azure Bastion + Jump Box** | Portal access to private resources without VPN |
+| **VPN Gateway** | Site-to-site or point-to-site VPN connectivity to the private VNet |
 | **Private/Public toggle** | Switch Foundry between private and public access |
 
 ## Modules
@@ -73,6 +74,7 @@ See [diagrams/architecture.md](diagrams/architecture.md) for the full Mermaid in
 | `cross-region-openai-connection.bicep` | Cross-region OpenAI + model + APIM API + PE + DNS + gateway connection |
 | `application-insights.bicep` | Log Analytics workspace + Application Insights + Foundry connection |
 | `bastion-jumpbox.bicep` | Azure Bastion + Windows jump box VM + NAT gateway |
+| `vpn-gateway.bicep` | VPN Gateway with GatewaySubnet for site-to-site or point-to-site connectivity |
 | `teams-publishing-infra.bicep` | App Gateway WAF v2 + APIM Bot API + Bot Service + Teams Channel + Key Vault |
 | `teams-agent-publish-script.bicep` | Deployment script: Agent Application + Deployment for Teams |
 | `workflow-deployment.bicep` | Deployment script: workflow agents + Agent Application |
@@ -149,6 +151,18 @@ az deployment group create \
 ```
 
 Then connect via Azure Portal → VM → Connect → Bastion.
+
+### Deploy with VPN Gateway
+
+```bash
+az deployment group create \
+  --resource-group "rg-hybrid-agent-test" \
+  --template-file main.bicep \
+  --parameters location="eastus2" \
+    deployVpnGateway=true
+```
+
+> **Note:** VPN Gateway provisioning takes 30-45 minutes. The default SKU is `VpnGw1` with RouteBased VPN type.
 
 ### Full Deploy (All Features)
 
@@ -330,6 +344,10 @@ defaultAction: 'Deny'
 | `deployBastion` | Deploy Bastion + jump box VM | `false` |
 | `bastionSubnetPrefix` | AzureBastionSubnet address prefix | `192.168.4.0/26` |
 | `jumpboxAdminPassword` | Jump box admin password | (required if deployed) |
+| **VPN Gateway** | | |
+| `deployVpnGateway` | Deploy VPN Gateway | `false` |
+| `gatewaySubnetPrefix` | GatewaySubnet address prefix | `192.168.255.0/27` |
+| `vpnGatewaySku` | VPN Gateway SKU | `VpnGw1` |
 
 ## MCP Server Deployment
 

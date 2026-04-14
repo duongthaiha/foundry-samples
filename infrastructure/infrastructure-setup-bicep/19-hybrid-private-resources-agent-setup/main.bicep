@@ -165,6 +165,23 @@ param bastionSubnetPrefix string = '192.168.4.0/26'
 @secure()
 param jumpboxAdminPassword string = ''
 
+@description('Set to true to deploy a VPN Gateway for site-to-site or point-to-site connectivity to the private VNet.')
+param deployVpnGateway bool = false
+
+@description('Address prefix for GatewaySubnet (minimum /27)')
+param gatewaySubnetPrefix string = '192.168.255.0/27'
+
+@description('SKU for the VPN Gateway')
+@allowed([
+  'VpnGw1'
+  'VpnGw2'
+  'VpnGw3'
+  'VpnGw1AZ'
+  'VpnGw2AZ'
+  'VpnGw3AZ'
+])
+param vpnGatewaySku string = 'VpnGw1'
+
 @description('Set to true to deploy an Azure OpenAI resource in a different region and connect it to the Foundry account.')
 param deployCrossRegionOpenAI bool = false
 
@@ -281,6 +298,11 @@ module vnet 'modules-network-secured/network-agent-vnet.bicep' = {
 var defaultApimSubnetPrefix = '192.168.3.0/24'
 var resolvedApimSubnetPrefix = !empty(apimSubnetPrefix) ? apimSubnetPrefix : (!empty(vnetAddressPrefix) ? cidrSubnet(vnetAddressPrefix, 24, 3) : defaultApimSubnetPrefix)
 
+resource apimSubnetNsg 'Microsoft.Network/networkSecurityGroups@2024-05-01' = if (deployApiManagement) {
+  name: '${trimVnetName}-${apimSubnetName}-nsg-${location}'
+  location: location
+}
+
 module apimSubnet 'modules-network-secured/subnet.bicep' = if (deployApiManagement) {
   name: 'apim-subnet-${uniqueSuffix}-deployment'
   scope: resourceGroup(vnetResourceGroupName)
@@ -288,6 +310,7 @@ module apimSubnet 'modules-network-secured/subnet.bicep' = if (deployApiManageme
     vnetName: vnet.outputs.virtualNetworkName
     subnetName: apimSubnetName
     addressPrefix: resolvedApimSubnetPrefix
+    networkSecurityGroupId: deployApiManagement ? apimSubnetNsg.id : ''
     delegations: [
       {
         name: 'Microsoft.Web/serverFarms'
@@ -626,6 +649,17 @@ module bastionJumpbox 'modules-network-secured/bastion-jumpbox.bicep' = if (depl
     bastionName: '${accountName}-bastion'
     vmName: '${uniqueSuffix}-jumpbox'
     adminPassword: jumpboxAdminPassword
+  }
+}
+
+// Deploy VPN Gateway for site-to-site or point-to-site connectivity
+module vpnGateway 'modules-network-secured/vpn-gateway.bicep' = if (deployVpnGateway) {
+  name: 'vpn-gateway-${uniqueSuffix}-deployment'
+  params: {
+    location: location
+    vnetName: vnet.outputs.virtualNetworkName
+    gatewaySubnetPrefix: gatewaySubnetPrefix
+    gatewaySku: vpnGatewaySku
   }
 }
 

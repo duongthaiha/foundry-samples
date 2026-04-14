@@ -79,7 +79,32 @@ resource apimApi 'Microsoft.ApiManagement/service/apis@2024-05-01' = {
     format: 'openapi-link'
     value: 'https://raw.githubusercontent.com/Azure/azure-rest-api-specs/main/specification/cognitiveservices/data-plane/AzureOpenAI/inference/stable/${inferenceApiVersion}/inference.json'
     serviceUrl: '${aiServicesEndpoint}/openai'
-    subscriptionRequired: true
+    subscriptionRequired: false
+  }
+}
+
+// ---- APIM managed identity auth to AI Services backend ----
+resource apimApiPolicy 'Microsoft.ApiManagement/service/apis/policies@2024-05-01' = {
+  name: 'policy'
+  parent: apimApi
+  properties: {
+    format: 'xml'
+    value: '<policies><inbound><base /><authentication-managed-identity resource="https://cognitiveservices.azure.com/" /></inbound><backend><base /></backend><outbound><base /></outbound><on-error><base /></on-error></policies>'
+  }
+}
+
+// ---- Grant APIM managed identity Cognitive Services OpenAI User on AI Services ----
+resource aiAccount 'Microsoft.CognitiveServices/accounts@2025-04-01-preview' existing = {
+  name: accountName
+}
+
+resource apimOpenAIUserRole 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
+  name: guid(aiAccount.id, apimService.id, '5e0bd9bd-7b93-4f28-af87-19fc36ad61bd')
+  scope: aiAccount
+  properties: {
+    principalId: apimService.identity.principalId
+    principalType: 'ServicePrincipal'
+    roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', '5e0bd9bd-7b93-4f28-af87-19fc36ad61bd')
   }
 }
 

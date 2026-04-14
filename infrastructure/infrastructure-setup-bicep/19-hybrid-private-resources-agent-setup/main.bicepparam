@@ -38,6 +38,9 @@ param deployApplicationInsights = true
 // Bastion + Jump Box (set to true for portal access to private resources)
 param deployBastion = false
 
+// VPN Gateway (set to true for site-to-site or point-to-site VPN connectivity)
+param deployVpnGateway = false
+
 // Cross-region Azure OpenAI connection
 param deployCrossRegionOpenAI = false
 param crossRegionLocation = 'westus'

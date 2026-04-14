@@ -19,6 +19,15 @@ resource project 'Microsoft.CognitiveServices/accounts/projects@2025-04-01-previ
   parent: account
 }
 
+// Account-level capability host must be created before project-level
+resource accountCapabilityHost 'Microsoft.CognitiveServices/accounts/capabilityHosts@2025-04-01-preview' = {
+  name: 'default'
+  parent: account
+  properties: {
+    capabilityHostKind: 'Agents'
+  }
+}
+
 resource projectCapabilityHost 'Microsoft.CognitiveServices/accounts/projects/capabilityHosts@2025-04-01-preview' = {
   name: projectCapHost
   parent: project
@@ -28,7 +37,9 @@ resource projectCapabilityHost 'Microsoft.CognitiveServices/accounts/projects/ca
     storageConnections: storageConnections
     threadStorageConnections: threadConnections
   }
-
+  dependsOn: [
+    accountCapabilityHost
+  ]
 }
 
 output projectCapHost string = projectCapabilityHost.name

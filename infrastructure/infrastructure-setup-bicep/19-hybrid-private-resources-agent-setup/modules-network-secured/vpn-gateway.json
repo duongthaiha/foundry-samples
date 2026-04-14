@@ -1,0 +1,132 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+  "contentVersion": "1.0.0.0",
+  "metadata": {
+    "_generator": {
+      "name": "bicep",
+      "version": "0.42.1.51946",
+      "templateHash": "15523537751580612016"
+    }
+  },
+  "parameters": {
+    "location": {
+      "type": "string",
+      "metadata": {
+        "description": "Azure region for the deployment"
+      }
+    },
+    "vnetName": {
+      "type": "string",
+      "metadata": {
+        "description": "VNet name to deploy the gateway into"
+      }
+    },
+    "gatewaySubnetPrefix": {
+      "type": "string",
+      "defaultValue": "192.168.255.0/27",
+      "metadata": {
+        "description": "Address prefix for GatewaySubnet (minimum /27)"
+      }
+    },
+    "gatewayName": {
+      "type": "string",
+      "defaultValue": "vpn-gateway",
+      "metadata": {
+        "description": "Name for the VPN Gateway"
+      }
+    },
+    "gatewaySku": {
+      "type": "string",
+      "defaultValue": "VpnGw1",
+      "allowedValues": [
+        "VpnGw1",
+        "VpnGw2",
+        "VpnGw3",
+        "VpnGw1AZ",
+        "VpnGw2AZ",
+        "VpnGw3AZ"
+      ],
+      "metadata": {
+        "description": "SKU for the VPN Gateway"
+      }
+    },
+    "vpnType": {
+      "type": "string",
+      "defaultValue": "RouteBased",
+      "allowedValues": [
+        "RouteBased",
+        "PolicyBased"
+      ],
+      "metadata": {
+        "description": "VPN type"
+      }
+    }
+  },
+  "resources": [
+    {
+      "type": "Microsoft.Network/virtualNetworks/subnets",
+      "apiVersion": "2024-05-01",
+      "name": "[format('{0}/{1}', parameters('vnetName'), 'GatewaySubnet')]",
+      "properties": {
+        "addressPrefix": "[parameters('gatewaySubnetPrefix')]"
+      }
+    },
+    {
+      "type": "Microsoft.Network/publicIPAddresses",
+      "apiVersion": "2024-05-01",
+      "name": "[format('{0}-pip', parameters('gatewayName'))]",
+      "location": "[parameters('location')]",
+      "sku": {
+        "name": "Standard"
+      },
+      "properties": {
+        "publicIPAllocationMethod": "Static"
+      }
+    },
+    {
+      "type": "Microsoft.Network/virtualNetworkGateways",
+      "apiVersion": "2024-05-01",
+      "name": "[parameters('gatewayName')]",
+      "location": "[parameters('location')]",
+      "properties": {
+        "gatewayType": "Vpn",
+        "vpnType": "[parameters('vpnType')]",
+        "sku": {
+          "name": "[parameters('gatewaySku')]",
+          "tier": "[parameters('gatewaySku')]"
+        },
+        "ipConfigurations": [
+          {
+            "name": "vnetGatewayConfig0",
+            "properties": {
+              "publicIPAddress": {
+                "id": "[resourceId('Microsoft.Network/publicIPAddresses', format('{0}-pip', parameters('gatewayName')))]"
+              },
+              "subnet": {
+                "id": "[resourceId('Microsoft.Network/virtualNetworks/subnets', parameters('vnetName'), 'GatewaySubnet')]"
+              }
+            }
+          }
+        ]
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.Network/publicIPAddresses', format('{0}-pip', parameters('gatewayName')))]",
+        "[resourceId('Microsoft.Network/virtualNetworks/subnets', parameters('vnetName'), 'GatewaySubnet')]"
+      ]
+    }
+  ],
+  "outputs": {
+    "gatewayName": {
+      "type": "string",
+      "value": "[parameters('gatewayName')]"
+    },
+    "gatewayId": {
+      "type": "string",
+      "value": "[resourceId('Microsoft.Network/virtualNetworkGateways', parameters('gatewayName'))]"
+    },
+    "publicIpAddress": {
+      "type": "string",
+      "value": "[reference(resourceId('Microsoft.Network/publicIPAddresses', format('{0}-pip', parameters('gatewayName'))), '2024-05-01').ipAddress]"
+    }
+  }
+}
