@@ -133,6 +133,9 @@ param deployBastion bool = false
 @description('Address prefix for AzureBastionSubnet (minimum /26)')
 param bastionSubnetPrefix string = '192.168.4.0/26'
 
+@description('Address prefix for the jump box subnet')
+param jumpboxSubnetPrefix string = '192.168.6.0/24'
+
 @description('Admin password for the jump box VM (required when deployBastion is true)')
 @secure()
 param jumpboxAdminPassword string = ''
@@ -524,6 +527,67 @@ module aiSearchRoleAssignments 'modules-network-secured/ai-search-role-assignmen
   ]
 }
 
+/*
+  Cross-service RBAC: Search MI → Storage, Search MI → OpenAI, Account MI → Search, Account MI → Storage
+  These roles enable knowledge source creation (Foundry IQ) and cross-service data access.
+*/
+
+// Search MI needs Storage Blob Data Reader to index blobs for knowledge sources
+module searchMiToStorageRoleAssignment 'modules-network-secured/search-mi-to-storage-role-assignment.bicep' = {
+  name: 'search-mi-storage-ra-${uniqueSuffix}-deployment'
+  scope: resourceGroup(azureStorageSubscriptionId, azureStorageResourceGroupName)
+  params: {
+    azureStorageName: aiDependencies.outputs.azureStorageName
+    searchServicePrincipalId: aiDependencies.outputs.aiSearchPrincipalId
+  }
+  dependsOn: [
+    aiSearch
+    storage
+    privateEndpointAndDNS
+  ]
+}
+
+// Search MI needs Cognitive Services OpenAI User to use embedding/chat models during indexing
+module searchMiToOpenAIRoleAssignment 'modules-network-secured/search-mi-to-openai-role-assignment.bicep' = {
+  name: 'search-mi-openai-ra-${uniqueSuffix}-deployment'
+  params: {
+    accountName: aiAccount.outputs.accountName
+    searchServicePrincipalId: aiDependencies.outputs.aiSearchPrincipalId
+  }
+  dependsOn: [
+    aiSearch
+    privateEndpointAndDNS
+  ]
+}
+
+// Account MI needs Search Index Data Contributor + Search Service Contributor
+module accountToSearchRoleAssignment 'modules-network-secured/ai-account-to-search-role-assignment.bicep' = {
+  name: 'account-search-ra-${uniqueSuffix}-deployment'
+  scope: resourceGroup(aiSearchServiceSubscriptionId, aiSearchServiceResourceGroupName)
+  params: {
+    aiSearchName: aiDependencies.outputs.aiSearchName
+    accountPrincipalId: aiAccount.outputs.accountPrincipalId
+  }
+  dependsOn: [
+    aiSearch
+    privateEndpointAndDNS
+  ]
+}
+
+// Account MI needs Storage Blob Data Contributor
+module accountToStorageRoleAssignment 'modules-network-secured/ai-account-to-storage-role-assignment.bicep' = {
+  name: 'account-storage-ra-${uniqueSuffix}-deployment'
+  scope: resourceGroup(azureStorageSubscriptionId, azureStorageResourceGroupName)
+  params: {
+    azureStorageName: aiDependencies.outputs.azureStorageName
+    accountPrincipalId: aiAccount.outputs.accountPrincipalId
+  }
+  dependsOn: [
+    storage
+    privateEndpointAndDNS
+  ]
+}
+
 // This module creates the capability host for the project and account
 module addProjectCapabilityHost 'modules-network-secured/add-project-capability-host.bicep' = {
   name: 'capabilityHost-configuration-${uniqueSuffix}-deployment'
@@ -617,7 +681,8 @@ module bastionJumpbox 'modules-network-secured/bastion-jumpbox.bicep' = if (depl
     location: location
     vnetName: vnet.outputs.virtualNetworkName
     bastionSubnetPrefix: bastionSubnetPrefix
-    vmSubnetName: vnet.outputs.peSubnetName
+    jumpboxSubnetName: 'jumpbox-subnet'
+    jumpboxSubnetPrefix: jumpboxSubnetPrefix
     bastionName: '${accountName}-bastion'
     vmName: '${uniqueSuffix}-jumpbox'
     adminPassword: jumpboxAdminPassword
