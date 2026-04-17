@@ -19,8 +19,11 @@ param vnetName string
 @description('Address prefix for AzureBastionSubnet (minimum /26)')
 param bastionSubnetPrefix string = '192.168.4.0/26'
 
-@description('Subnet to place the jump box VM in (must have access to private endpoints)')
-param vmSubnetName string = 'pe-subnet'
+@description('Name for the jump box subnet')
+param jumpboxSubnetName string = 'jumpbox-subnet'
+
+@description('Address prefix for the jump box subnet')
+param jumpboxSubnetPrefix string = '192.168.6.0/24'
 
 @description('Name for the Bastion host')
 param bastionName string = 'bastion'
@@ -29,7 +32,7 @@ param bastionName string = 'bastion'
 param vmName string = 'jumpbox'
 
 @description('VM size')
-param vmSize string = 'Standard_B2s'
+param vmSize string = 'Standard_B2s_v2'
 
 @description('Admin username for the VM')
 param adminUsername string = 'azureuser'
@@ -115,21 +118,15 @@ resource existingVnet 'Microsoft.Network/virtualNetworks@2024-05-01' existing = 
   name: vnetName
 }
 
-resource vmSubnet 'Microsoft.Network/virtualNetworks/subnets@2024-05-01' existing = {
-  name: vmSubnetName
-  parent: existingVnet
-}
-
-// Attach NAT gateway to VM subnet for outbound internet
-resource vmSubnetWithNat 'Microsoft.Network/virtualNetworks/subnets@2024-05-01' = {
-  name: vmSubnetName
+// Dedicated subnet for the jump box VM with NAT gateway for outbound internet
+resource jumpboxSubnet 'Microsoft.Network/virtualNetworks/subnets@2024-05-01' = {
+  name: jumpboxSubnetName
   parent: existingVnet
   properties: {
-    addressPrefix: vmSubnet.properties.addressPrefix
+    addressPrefix: jumpboxSubnetPrefix
     natGateway: {
       id: natGateway.id
     }
-    networkSecurityGroup: vmSubnet.properties.networkSecurityGroup
   }
   dependsOn: [
     bastionSubnet
@@ -145,16 +142,13 @@ resource vmNic 'Microsoft.Network/networkInterfaces@2024-05-01' = {
         name: 'ipconfig1'
         properties: {
           subnet: {
-            id: vmSubnetWithNat.id
+            id: jumpboxSubnet.id
           }
           privateIPAllocationMethod: 'Dynamic'
         }
       }
     ]
   }
-  dependsOn: [
-    bastionSubnet
-  ]
 }
 
 // ---- Jump Box VM ----
