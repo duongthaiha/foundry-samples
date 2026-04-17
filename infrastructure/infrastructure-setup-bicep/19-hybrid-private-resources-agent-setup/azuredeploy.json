@@ -5,7 +5,7 @@
     "_generator": {
       "name": "bicep",
       "version": "0.42.1.51946",
-      "templateHash": "2094705040545045466"
+      "templateHash": "14661453957712363679"
     }
   },
   "parameters": {
@@ -270,6 +270,13 @@
       "defaultValue": "192.168.4.0/26",
       "metadata": {
         "description": "Address prefix for AzureBastionSubnet (minimum /26)"
+      }
+    },
+    "jumpboxSubnetPrefix": {
+      "type": "string",
+      "defaultValue": "192.168.6.0/24",
+      "metadata": {
+        "description": "Address prefix for the jump box subnet"
       }
     },
     "jumpboxAdminPassword": {
@@ -1917,7 +1924,7 @@
             "_generator": {
               "name": "bicep",
               "version": "0.42.1.51946",
-              "templateHash": "16516106179017566598"
+              "templateHash": "12121665506399953556"
             }
           },
           "parameters": {
@@ -2046,7 +2053,7 @@
                 "replicaCount": 1,
                 "semanticSearch": "disabled",
                 "networkRuleSet": {
-                  "bypass": "None",
+                  "bypass": "AzureServices",
                   "ipRules": []
                 }
               },
@@ -2091,6 +2098,10 @@
             "aiSearchServiceSubscriptionId": {
               "type": "string",
               "value": "[if(parameters('aiSearchExists'), variables('acsParts')[2], subscription().subscriptionId)]"
+            },
+            "aiSearchPrincipalId": {
+              "type": "string",
+              "value": "[if(parameters('aiSearchExists'), reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', variables('acsParts')[2], variables('acsParts')[4]), 'Microsoft.Search/searchServices', variables('acsParts')[8]), '2024-06-01-preview', 'full').identity.principalId, reference(resourceId('Microsoft.Search/searchServices', parameters('aiSearchName')), '2024-06-01-preview', 'full').identity.principalId)]"
             },
             "azureStorageName": {
               "type": "string",
@@ -3474,6 +3485,270 @@
     {
       "type": "Microsoft.Resources/deployments",
       "apiVersion": "2025-04-01",
+      "name": "[format('search-mi-storage-ra-{0}-deployment', variables('uniqueSuffix'))]",
+      "subscriptionId": "[variables('azureStorageSubscriptionId')]",
+      "resourceGroup": "[variables('azureStorageResourceGroupName')]",
+      "properties": {
+        "expressionEvaluationOptions": {
+          "scope": "inner"
+        },
+        "mode": "Incremental",
+        "parameters": {
+          "azureStorageName": {
+            "value": "[reference(resourceId('Microsoft.Resources/deployments', format('dependencies-{0}-deployment', variables('uniqueSuffix'))), '2025-04-01').outputs.azureStorageName.value]"
+          },
+          "searchServicePrincipalId": {
+            "value": "[reference(resourceId('Microsoft.Resources/deployments', format('dependencies-{0}-deployment', variables('uniqueSuffix'))), '2025-04-01').outputs.aiSearchPrincipalId.value]"
+          }
+        },
+        "template": {
+          "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+          "contentVersion": "1.0.0.0",
+          "metadata": {
+            "_generator": {
+              "name": "bicep",
+              "version": "0.42.1.51946",
+              "templateHash": "16931641142502905159"
+            }
+          },
+          "parameters": {
+            "azureStorageName": {
+              "type": "string",
+              "metadata": {
+                "description": "Name of the Storage account"
+              }
+            },
+            "searchServicePrincipalId": {
+              "type": "string",
+              "metadata": {
+                "description": "Principal ID of the AI Search service managed identity"
+              }
+            }
+          },
+          "resources": [
+            {
+              "type": "Microsoft.Authorization/roleAssignments",
+              "apiVersion": "2022-04-01",
+              "scope": "[resourceId('Microsoft.Storage/storageAccounts', parameters('azureStorageName'))]",
+              "name": "[guid(parameters('searchServicePrincipalId'), resourceId('Microsoft.Authorization/roleDefinitions', 'acdd72a7-3385-48ef-bd42-f606fba81ae7'), resourceId('Microsoft.Storage/storageAccounts', parameters('azureStorageName')))]",
+              "properties": {
+                "principalId": "[parameters('searchServicePrincipalId')]",
+                "roleDefinitionId": "[resourceId('Microsoft.Authorization/roleDefinitions', 'acdd72a7-3385-48ef-bd42-f606fba81ae7')]",
+                "principalType": "ServicePrincipal"
+              }
+            }
+          ]
+        }
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.Resources/deployments', format('dependencies-{0}-deployment', variables('uniqueSuffix')))]",
+        "[resourceId('Microsoft.Resources/deployments', format('{0}-private-endpoint', variables('uniqueSuffix')))]"
+      ]
+    },
+    {
+      "type": "Microsoft.Resources/deployments",
+      "apiVersion": "2025-04-01",
+      "name": "[format('search-mi-openai-ra-{0}-deployment', variables('uniqueSuffix'))]",
+      "properties": {
+        "expressionEvaluationOptions": {
+          "scope": "inner"
+        },
+        "mode": "Incremental",
+        "parameters": {
+          "accountName": {
+            "value": "[reference(resourceId('Microsoft.Resources/deployments', format('{0}-{1}-deployment', variables('accountName'), variables('uniqueSuffix'))), '2025-04-01').outputs.accountName.value]"
+          },
+          "searchServicePrincipalId": {
+            "value": "[reference(resourceId('Microsoft.Resources/deployments', format('dependencies-{0}-deployment', variables('uniqueSuffix'))), '2025-04-01').outputs.aiSearchPrincipalId.value]"
+          }
+        },
+        "template": {
+          "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+          "contentVersion": "1.0.0.0",
+          "metadata": {
+            "_generator": {
+              "name": "bicep",
+              "version": "0.42.1.51946",
+              "templateHash": "7494515879711492754"
+            }
+          },
+          "parameters": {
+            "accountName": {
+              "type": "string",
+              "metadata": {
+                "description": "Name of the AI Services account"
+              }
+            },
+            "searchServicePrincipalId": {
+              "type": "string",
+              "metadata": {
+                "description": "Principal ID of the AI Search service managed identity"
+              }
+            }
+          },
+          "resources": [
+            {
+              "type": "Microsoft.Authorization/roleAssignments",
+              "apiVersion": "2022-04-01",
+              "scope": "[resourceId('Microsoft.CognitiveServices/accounts', parameters('accountName'))]",
+              "name": "[guid(parameters('searchServicePrincipalId'), resourceId('Microsoft.Authorization/roleDefinitions', '5e0bd9bd-7b93-4f28-af87-19fc36ad61bd'), resourceId('Microsoft.CognitiveServices/accounts', parameters('accountName')))]",
+              "properties": {
+                "principalId": "[parameters('searchServicePrincipalId')]",
+                "roleDefinitionId": "[resourceId('Microsoft.Authorization/roleDefinitions', '5e0bd9bd-7b93-4f28-af87-19fc36ad61bd')]",
+                "principalType": "ServicePrincipal"
+              }
+            }
+          ]
+        }
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.Resources/deployments', format('{0}-{1}-deployment', variables('accountName'), variables('uniqueSuffix')))]",
+        "[resourceId('Microsoft.Resources/deployments', format('dependencies-{0}-deployment', variables('uniqueSuffix')))]",
+        "[resourceId('Microsoft.Resources/deployments', format('{0}-private-endpoint', variables('uniqueSuffix')))]"
+      ]
+    },
+    {
+      "type": "Microsoft.Resources/deployments",
+      "apiVersion": "2025-04-01",
+      "name": "[format('account-search-ra-{0}-deployment', variables('uniqueSuffix'))]",
+      "subscriptionId": "[variables('aiSearchServiceSubscriptionId')]",
+      "resourceGroup": "[variables('aiSearchServiceResourceGroupName')]",
+      "properties": {
+        "expressionEvaluationOptions": {
+          "scope": "inner"
+        },
+        "mode": "Incremental",
+        "parameters": {
+          "aiSearchName": {
+            "value": "[reference(resourceId('Microsoft.Resources/deployments', format('dependencies-{0}-deployment', variables('uniqueSuffix'))), '2025-04-01').outputs.aiSearchName.value]"
+          },
+          "accountPrincipalId": {
+            "value": "[reference(resourceId('Microsoft.Resources/deployments', format('{0}-{1}-deployment', variables('accountName'), variables('uniqueSuffix'))), '2025-04-01').outputs.accountPrincipalId.value]"
+          }
+        },
+        "template": {
+          "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+          "contentVersion": "1.0.0.0",
+          "metadata": {
+            "_generator": {
+              "name": "bicep",
+              "version": "0.42.1.51946",
+              "templateHash": "5025194208434644799"
+            }
+          },
+          "parameters": {
+            "aiSearchName": {
+              "type": "string",
+              "metadata": {
+                "description": "Name of the AI Search resource"
+              }
+            },
+            "accountPrincipalId": {
+              "type": "string",
+              "metadata": {
+                "description": "Principal ID of the AI Services account managed identity"
+              }
+            }
+          },
+          "resources": [
+            {
+              "type": "Microsoft.Authorization/roleAssignments",
+              "apiVersion": "2022-04-01",
+              "scope": "[resourceId('Microsoft.Search/searchServices', parameters('aiSearchName'))]",
+              "name": "[guid(parameters('accountPrincipalId'), resourceId('Microsoft.Authorization/roleDefinitions', '8ebe5a00-799e-43f5-93ac-243d3dce84a7'), resourceId('Microsoft.Search/searchServices', parameters('aiSearchName')))]",
+              "properties": {
+                "principalId": "[parameters('accountPrincipalId')]",
+                "roleDefinitionId": "[resourceId('Microsoft.Authorization/roleDefinitions', '8ebe5a00-799e-43f5-93ac-243d3dce84a7')]",
+                "principalType": "ServicePrincipal"
+              }
+            },
+            {
+              "type": "Microsoft.Authorization/roleAssignments",
+              "apiVersion": "2022-04-01",
+              "scope": "[resourceId('Microsoft.Search/searchServices', parameters('aiSearchName'))]",
+              "name": "[guid(parameters('accountPrincipalId'), resourceId('Microsoft.Authorization/roleDefinitions', '7ca78c08-252a-4471-8644-bb5ff32d4ba0'), resourceId('Microsoft.Search/searchServices', parameters('aiSearchName')))]",
+              "properties": {
+                "principalId": "[parameters('accountPrincipalId')]",
+                "roleDefinitionId": "[resourceId('Microsoft.Authorization/roleDefinitions', '7ca78c08-252a-4471-8644-bb5ff32d4ba0')]",
+                "principalType": "ServicePrincipal"
+              }
+            }
+          ]
+        }
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.Resources/deployments', format('{0}-{1}-deployment', variables('accountName'), variables('uniqueSuffix')))]",
+        "[resourceId('Microsoft.Resources/deployments', format('dependencies-{0}-deployment', variables('uniqueSuffix')))]",
+        "[resourceId('Microsoft.Resources/deployments', format('{0}-private-endpoint', variables('uniqueSuffix')))]"
+      ]
+    },
+    {
+      "type": "Microsoft.Resources/deployments",
+      "apiVersion": "2025-04-01",
+      "name": "[format('account-storage-ra-{0}-deployment', variables('uniqueSuffix'))]",
+      "subscriptionId": "[variables('azureStorageSubscriptionId')]",
+      "resourceGroup": "[variables('azureStorageResourceGroupName')]",
+      "properties": {
+        "expressionEvaluationOptions": {
+          "scope": "inner"
+        },
+        "mode": "Incremental",
+        "parameters": {
+          "azureStorageName": {
+            "value": "[reference(resourceId('Microsoft.Resources/deployments', format('dependencies-{0}-deployment', variables('uniqueSuffix'))), '2025-04-01').outputs.azureStorageName.value]"
+          },
+          "accountPrincipalId": {
+            "value": "[reference(resourceId('Microsoft.Resources/deployments', format('{0}-{1}-deployment', variables('accountName'), variables('uniqueSuffix'))), '2025-04-01').outputs.accountPrincipalId.value]"
+          }
+        },
+        "template": {
+          "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+          "contentVersion": "1.0.0.0",
+          "metadata": {
+            "_generator": {
+              "name": "bicep",
+              "version": "0.42.1.51946",
+              "templateHash": "14510022294704830832"
+            }
+          },
+          "parameters": {
+            "azureStorageName": {
+              "type": "string",
+              "metadata": {
+                "description": "Name of the Storage account"
+              }
+            },
+            "accountPrincipalId": {
+              "type": "string",
+              "metadata": {
+                "description": "Principal ID of the AI Services account managed identity"
+              }
+            }
+          },
+          "resources": [
+            {
+              "type": "Microsoft.Authorization/roleAssignments",
+              "apiVersion": "2022-04-01",
+              "scope": "[resourceId('Microsoft.Storage/storageAccounts', parameters('azureStorageName'))]",
+              "name": "[guid(parameters('accountPrincipalId'), resourceId('Microsoft.Authorization/roleDefinitions', 'ba92f5b4-2d11-453d-a403-e96b0029c9fe'), resourceId('Microsoft.Storage/storageAccounts', parameters('azureStorageName')))]",
+              "properties": {
+                "principalId": "[parameters('accountPrincipalId')]",
+                "roleDefinitionId": "[resourceId('Microsoft.Authorization/roleDefinitions', 'ba92f5b4-2d11-453d-a403-e96b0029c9fe')]",
+                "principalType": "ServicePrincipal"
+              }
+            }
+          ]
+        }
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.Resources/deployments', format('{0}-{1}-deployment', variables('accountName'), variables('uniqueSuffix')))]",
+        "[resourceId('Microsoft.Resources/deployments', format('dependencies-{0}-deployment', variables('uniqueSuffix')))]",
+        "[resourceId('Microsoft.Resources/deployments', format('{0}-private-endpoint', variables('uniqueSuffix')))]"
+      ]
+    },
+    {
+      "type": "Microsoft.Resources/deployments",
+      "apiVersion": "2025-04-01",
       "name": "[format('capabilityHost-configuration-{0}-deployment', variables('uniqueSuffix'))]",
       "properties": {
         "expressionEvaluationOptions": {
@@ -3950,8 +4225,11 @@
           "bastionSubnetPrefix": {
             "value": "[parameters('bastionSubnetPrefix')]"
           },
-          "vmSubnetName": {
-            "value": "[reference(resourceId('Microsoft.Resources/deployments', format('vnet-{0}-{1}-deployment', variables('trimVnetName'), variables('uniqueSuffix'))), '2025-04-01').outputs.peSubnetName.value]"
+          "jumpboxSubnetName": {
+            "value": "jumpbox-subnet"
+          },
+          "jumpboxSubnetPrefix": {
+            "value": "[parameters('jumpboxSubnetPrefix')]"
           },
           "bastionName": {
             "value": "[format('{0}-bastion', variables('accountName'))]"
@@ -3970,7 +4248,7 @@
             "_generator": {
               "name": "bicep",
               "version": "0.42.1.51946",
-              "templateHash": "7953078713756310465"
+              "templateHash": "10185158546080057700"
             }
           },
           "parameters": {
@@ -3993,11 +4271,18 @@
                 "description": "Address prefix for AzureBastionSubnet (minimum /26)"
               }
             },
-            "vmSubnetName": {
+            "jumpboxSubnetName": {
               "type": "string",
-              "defaultValue": "pe-subnet",
+              "defaultValue": "jumpbox-subnet",
               "metadata": {
-                "description": "Subnet to place the jump box VM in (must have access to private endpoints)"
+                "description": "Name for the jump box subnet"
+              }
+            },
+            "jumpboxSubnetPrefix": {
+              "type": "string",
+              "defaultValue": "192.168.6.0/24",
+              "metadata": {
+                "description": "Address prefix for the jump box subnet"
               }
             },
             "bastionName": {
@@ -4016,7 +4301,7 @@
             },
             "vmSize": {
               "type": "string",
-              "defaultValue": "Standard_B2s",
+              "defaultValue": "Standard_B2s_v2",
               "metadata": {
                 "description": "VM size"
               }
@@ -4119,13 +4404,12 @@
             {
               "type": "Microsoft.Network/virtualNetworks/subnets",
               "apiVersion": "2024-05-01",
-              "name": "[format('{0}/{1}', parameters('vnetName'), parameters('vmSubnetName'))]",
+              "name": "[format('{0}/{1}', parameters('vnetName'), parameters('jumpboxSubnetName'))]",
               "properties": {
-                "addressPrefix": "[reference(resourceId('Microsoft.Network/virtualNetworks/subnets', parameters('vnetName'), parameters('vmSubnetName')), '2024-05-01').addressPrefix]",
+                "addressPrefix": "[parameters('jumpboxSubnetPrefix')]",
                 "natGateway": {
                   "id": "[resourceId('Microsoft.Network/natGateways', format('{0}-nat-gw', parameters('vmName')))]"
-                },
-                "networkSecurityGroup": "[reference(resourceId('Microsoft.Network/virtualNetworks/subnets', parameters('vnetName'), parameters('vmSubnetName')), '2024-05-01').networkSecurityGroup]"
+                }
               },
               "dependsOn": [
                 "[resourceId('Microsoft.Network/virtualNetworks/subnets', split(format('{0}/AzureBastionSubnet', parameters('vnetName')), '/')[0], split(format('{0}/AzureBastionSubnet', parameters('vnetName')), '/')[1])]",
@@ -4143,7 +4427,7 @@
                     "name": "ipconfig1",
                     "properties": {
                       "subnet": {
-                        "id": "[resourceId('Microsoft.Network/virtualNetworks/subnets', parameters('vnetName'), parameters('vmSubnetName'))]"
+                        "id": "[resourceId('Microsoft.Network/virtualNetworks/subnets', parameters('vnetName'), parameters('jumpboxSubnetName'))]"
                       },
                       "privateIPAllocationMethod": "Dynamic"
                     }
@@ -4151,8 +4435,7 @@
                 ]
               },
               "dependsOn": [
-                "[resourceId('Microsoft.Network/virtualNetworks/subnets', split(format('{0}/AzureBastionSubnet', parameters('vnetName')), '/')[0], split(format('{0}/AzureBastionSubnet', parameters('vnetName')), '/')[1])]",
-                "[resourceId('Microsoft.Network/virtualNetworks/subnets', parameters('vnetName'), parameters('vmSubnetName'))]"
+                "[resourceId('Microsoft.Network/virtualNetworks/subnets', parameters('vnetName'), parameters('jumpboxSubnetName'))]"
               ]
             },
             {
