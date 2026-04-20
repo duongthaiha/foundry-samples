@@ -5,7 +5,7 @@
     "_generator": {
       "name": "bicep",
       "version": "0.42.1.51946",
-      "templateHash": "10407219070106345105"
+      "templateHash": "16266704100981603667"
     }
   },
   "parameters": {
@@ -1478,7 +1478,7 @@
             "_generator": {
               "name": "bicep",
               "version": "0.42.1.51946",
-              "templateHash": "1167841404925031150"
+              "templateHash": "9338786348877854592"
             }
           },
           "parameters": {
@@ -1533,7 +1533,7 @@
                   "ipRules": [],
                   "bypass": "AzureServices"
                 },
-                "publicNetworkAccess": "Disabled",
+                "publicNetworkAccess": "Enabled",
                 "networkInjections": "[if(equals(parameters('networkInjection'), 'true'), createArray(createObject('scenario', 'agent', 'subnetArmId', parameters('agentSubnetId'), 'useMicrosoftManagedNetwork', false())), null())]",
                 "disableLocalAuth": false
               }
@@ -3605,6 +3605,228 @@
         "[resourceId('Microsoft.Resources/deployments', format('{0}-{1}-deployment', variables('accountName'), variables('uniqueSuffix')))]",
         "[resourceId('Microsoft.Resources/deployments', format('dependencies-{0}-deployment', variables('uniqueSuffix')))]",
         "[resourceId('Microsoft.Resources/deployments', format('{0}-private-endpoint', variables('uniqueSuffix')))]"
+      ]
+    },
+    {
+      "condition": "[parameters('deployCrossRegionOpenAI')]",
+      "type": "Microsoft.Resources/deployments",
+      "apiVersion": "2025-04-01",
+      "name": "[format('search-mi-xregion-openai-ra-{0}-deployment', variables('uniqueSuffix'))]",
+      "properties": {
+        "expressionEvaluationOptions": {
+          "scope": "inner"
+        },
+        "mode": "Incremental",
+        "parameters": {
+          "accountName": {
+            "value": "[variables('crossRegionOpenAIName')]"
+          },
+          "searchServicePrincipalId": {
+            "value": "[reference(resourceId('Microsoft.Resources/deployments', format('dependencies-{0}-deployment', variables('uniqueSuffix'))), '2025-04-01').outputs.aiSearchPrincipalId.value]"
+          }
+        },
+        "template": {
+          "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+          "contentVersion": "1.0.0.0",
+          "metadata": {
+            "_generator": {
+              "name": "bicep",
+              "version": "0.42.1.51946",
+              "templateHash": "7494515879711492754"
+            }
+          },
+          "parameters": {
+            "accountName": {
+              "type": "string",
+              "metadata": {
+                "description": "Name of the AI Services account"
+              }
+            },
+            "searchServicePrincipalId": {
+              "type": "string",
+              "metadata": {
+                "description": "Principal ID of the AI Search service managed identity"
+              }
+            }
+          },
+          "resources": [
+            {
+              "type": "Microsoft.Authorization/roleAssignments",
+              "apiVersion": "2022-04-01",
+              "scope": "[resourceId('Microsoft.CognitiveServices/accounts', parameters('accountName'))]",
+              "name": "[guid(parameters('searchServicePrincipalId'), resourceId('Microsoft.Authorization/roleDefinitions', '5e0bd9bd-7b93-4f28-af87-19fc36ad61bd'), resourceId('Microsoft.CognitiveServices/accounts', parameters('accountName')))]",
+              "properties": {
+                "principalId": "[parameters('searchServicePrincipalId')]",
+                "roleDefinitionId": "[resourceId('Microsoft.Authorization/roleDefinitions', '5e0bd9bd-7b93-4f28-af87-19fc36ad61bd')]",
+                "principalType": "ServicePrincipal"
+              }
+            }
+          ]
+        }
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.Resources/deployments', format('dependencies-{0}-deployment', variables('uniqueSuffix')))]",
+        "[resourceId('Microsoft.Resources/deployments', format('cross-region-openai-{0}-deployment', variables('uniqueSuffix')))]",
+        "[resourceId('Microsoft.Resources/deployments', format('{0}-private-endpoint', variables('uniqueSuffix')))]"
+      ]
+    },
+    {
+      "type": "Microsoft.Resources/deployments",
+      "apiVersion": "2025-04-01",
+      "name": "[format('search-spl-aiservices-{0}-deployment', variables('uniqueSuffix'))]",
+      "properties": {
+        "expressionEvaluationOptions": {
+          "scope": "inner"
+        },
+        "mode": "Incremental",
+        "parameters": {
+          "location": {
+            "value": "[parameters('location')]"
+          },
+          "searchServiceName": {
+            "value": "[reference(resourceId('Microsoft.Resources/deployments', format('dependencies-{0}-deployment', variables('uniqueSuffix'))), '2025-04-01').outputs.aiSearchName.value]"
+          },
+          "aiServicesAccountName": {
+            "value": "[reference(resourceId('Microsoft.Resources/deployments', format('{0}-{1}-deployment', variables('accountName'), variables('uniqueSuffix'))), '2025-04-01').outputs.accountName.value]"
+          }
+        },
+        "template": {
+          "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+          "contentVersion": "1.0.0.0",
+          "metadata": {
+            "_generator": {
+              "name": "bicep",
+              "version": "0.42.1.51946",
+              "templateHash": "18023988574355091432"
+            }
+          },
+          "parameters": {
+            "searchServiceName": {
+              "type": "string",
+              "metadata": {
+                "description": "Name of the Azure AI Search service that will own the SPL"
+              }
+            },
+            "aiServicesAccountName": {
+              "type": "string",
+              "metadata": {
+                "description": "Name of the AI Services account being privately linked"
+              }
+            },
+            "sharedPrivateLinkName": {
+              "type": "string",
+              "defaultValue": "search-to-aiservices-openai",
+              "metadata": {
+                "description": "Name of the SPL resource on the Search service"
+              }
+            },
+            "groupId": {
+              "type": "string",
+              "defaultValue": "openai_account",
+              "metadata": {
+                "description": "Group id for the shared private link target. For AI Services accounts (kind=AIServices) used as Azure OpenAI, use openai_account."
+              }
+            },
+            "location": {
+              "type": "string",
+              "defaultValue": "[resourceGroup().location]",
+              "metadata": {
+                "description": "Location for the auto-approval deployment script"
+              }
+            },
+            "approvalScriptForceUpdateTag": {
+              "type": "string",
+              "defaultValue": "[utcNow()]",
+              "metadata": {
+                "description": "Force a re-run of the approval script (bump to retry approval)"
+              }
+            }
+          },
+          "resources": [
+            {
+              "type": "Microsoft.Search/searchServices/sharedPrivateLinkResources",
+              "apiVersion": "2025-05-01",
+              "name": "[format('{0}/{1}', parameters('searchServiceName'), parameters('sharedPrivateLinkName'))]",
+              "properties": {
+                "privateLinkResourceId": "[resourceId('Microsoft.CognitiveServices/accounts', parameters('aiServicesAccountName'))]",
+                "groupId": "[parameters('groupId')]",
+                "requestMessage": "Azure AI Search indexer skill access to AI Services (auto-approved by Bicep)"
+              }
+            },
+            {
+              "type": "Microsoft.ManagedIdentity/userAssignedIdentities",
+              "apiVersion": "2023-01-31",
+              "name": "[format('{0}-{1}-approver', parameters('searchServiceName'), parameters('sharedPrivateLinkName'))]",
+              "location": "[parameters('location')]"
+            },
+            {
+              "type": "Microsoft.Authorization/roleAssignments",
+              "apiVersion": "2022-04-01",
+              "scope": "[resourceId('Microsoft.CognitiveServices/accounts', parameters('aiServicesAccountName'))]",
+              "name": "[guid(resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', format('{0}-{1}-approver', parameters('searchServiceName'), parameters('sharedPrivateLinkName'))), subscriptionResourceId('Microsoft.Authorization/roleDefinitions', '25fbc0a9-bd7c-42a3-aa1a-3b75d497ee68'), resourceId('Microsoft.CognitiveServices/accounts', parameters('aiServicesAccountName')))]",
+              "properties": {
+                "principalId": "[reference(resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', format('{0}-{1}-approver', parameters('searchServiceName'), parameters('sharedPrivateLinkName'))), '2023-01-31').principalId]",
+                "roleDefinitionId": "[subscriptionResourceId('Microsoft.Authorization/roleDefinitions', '25fbc0a9-bd7c-42a3-aa1a-3b75d497ee68')]",
+                "principalType": "ServicePrincipal"
+              },
+              "dependsOn": [
+                "[resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', format('{0}-{1}-approver', parameters('searchServiceName'), parameters('sharedPrivateLinkName')))]"
+              ]
+            },
+            {
+              "type": "Microsoft.Resources/deploymentScripts",
+              "apiVersion": "2023-08-01",
+              "name": "[format('{0}-{1}-approve', parameters('searchServiceName'), parameters('sharedPrivateLinkName'))]",
+              "location": "[parameters('location')]",
+              "kind": "AzureCLI",
+              "identity": {
+                "type": "UserAssigned",
+                "userAssignedIdentities": {
+                  "[format('{0}', resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', format('{0}-{1}-approver', parameters('searchServiceName'), parameters('sharedPrivateLinkName'))))]": {}
+                }
+              },
+              "properties": {
+                "azCliVersion": "2.59.0",
+                "timeout": "PT15M",
+                "retentionInterval": "PT1H",
+                "forceUpdateTag": "[parameters('approvalScriptForceUpdateTag')]",
+                "cleanupPreference": "OnSuccess",
+                "environmentVariables": [
+                  {
+                    "name": "ACCOUNT_ID",
+                    "value": "[resourceId('Microsoft.CognitiveServices/accounts', parameters('aiServicesAccountName'))]"
+                  },
+                  {
+                    "name": "SPL_NAME",
+                    "value": "[parameters('sharedPrivateLinkName')]"
+                  }
+                ],
+                "scriptContent": "      set -e\r\n      echo \"Looking for PE connection on $ACCOUNT_ID matching SPL '$SPL_NAME'...\"\r\n      for i in $(seq 1 30); do\r\n        # PE connection name pattern from Search SPL: \"<spl-name>.<guid>\"\r\n        PE_NAME=$(az rest --method get \\\r\n          --uri \"https://management.azure.com${ACCOUNT_ID}/privateEndpointConnections?api-version=2024-10-01\" \\\r\n          --query \"value[?starts_with(name, '${SPL_NAME}.')] | [0].name\" -o tsv 2>/dev/null || true)\r\n        if [ -n \"$PE_NAME\" ] && [ \"$PE_NAME\" != \"None\" ]; then\r\n          # name comes back as \"<account>/<conn>\"; strip parent prefix if present\r\n          SHORT_NAME=\"${PE_NAME##*/}\"\r\n          STATUS=$(az rest --method get \\\r\n            --uri \"https://management.azure.com${ACCOUNT_ID}/privateEndpointConnections/${SHORT_NAME}?api-version=2024-10-01\" \\\r\n            --query \"properties.privateLinkServiceConnectionState.status\" -o tsv)\r\n          echo \"Found PE connection '$SHORT_NAME' with status '$STATUS'\"\r\n          if [ \"$STATUS\" = \"Approved\" ]; then\r\n            echo \"Already approved.\"\r\n            exit 0\r\n          fi\r\n          BODY=$(cat <<EOF\r\n{\"properties\":{\"privateLinkServiceConnectionState\":{\"status\":\"Approved\",\"description\":\"Auto-approved by Bicep deployment for Search SPL\",\"actionsRequired\":\"None\"}}}\r\nEOF\r\n)\r\n          az rest --method put \\\r\n            --uri \"https://management.azure.com${ACCOUNT_ID}/privateEndpointConnections/${SHORT_NAME}?api-version=2024-10-01\" \\\r\n            --body \"$BODY\"\r\n          echo \"Approval submitted.\"\r\n          exit 0\r\n        fi\r\n        echo \"Attempt $i: PE connection not yet visible, sleeping 20s...\"\r\n        sleep 20\r\n      done\r\n      echo \"ERROR: PE connection for SPL '$SPL_NAME' did not appear within timeout.\" >&2\r\n      exit 1\r\n    "
+              },
+              "dependsOn": [
+                "[resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', format('{0}-{1}-approver', parameters('searchServiceName'), parameters('sharedPrivateLinkName')))]",
+                "[extensionResourceId(resourceId('Microsoft.CognitiveServices/accounts', parameters('aiServicesAccountName')), 'Microsoft.Authorization/roleAssignments', guid(resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', format('{0}-{1}-approver', parameters('searchServiceName'), parameters('sharedPrivateLinkName'))), subscriptionResourceId('Microsoft.Authorization/roleDefinitions', '25fbc0a9-bd7c-42a3-aa1a-3b75d497ee68'), resourceId('Microsoft.CognitiveServices/accounts', parameters('aiServicesAccountName'))))]",
+                "[resourceId('Microsoft.Search/searchServices/sharedPrivateLinkResources', parameters('searchServiceName'), parameters('sharedPrivateLinkName'))]"
+              ]
+            }
+          ],
+          "outputs": {
+            "sharedPrivateLinkResourceId": {
+              "type": "string",
+              "value": "[resourceId('Microsoft.Search/searchServices/sharedPrivateLinkResources', parameters('searchServiceName'), parameters('sharedPrivateLinkName'))]"
+            },
+            "sharedPrivateLinkStatus": {
+              "type": "string",
+              "value": "[reference(resourceId('Microsoft.Search/searchServices/sharedPrivateLinkResources', parameters('searchServiceName'), parameters('sharedPrivateLinkName')), '2025-05-01').status]"
+            }
+          }
+        }
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.Resources/deployments', format('{0}-{1}-deployment', variables('accountName'), variables('uniqueSuffix')))]",
+        "[resourceId('Microsoft.Resources/deployments', format('dependencies-{0}-deployment', variables('uniqueSuffix')))]",
+        "[resourceId('Microsoft.Resources/deployments', format('{0}-private-endpoint', variables('uniqueSuffix')))]",
+        "[resourceId('Microsoft.Resources/deployments', format('search-mi-openai-ra-{0}-deployment', variables('uniqueSuffix')))]"
       ]
     },
     {

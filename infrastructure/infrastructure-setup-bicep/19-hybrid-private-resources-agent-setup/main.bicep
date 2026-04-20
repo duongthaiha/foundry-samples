@@ -560,6 +560,42 @@ module searchMiToOpenAIRoleAssignment 'modules-network-secured/search-mi-to-open
   ]
 }
 
+// Search MI also needs Cognitive Services OpenAI User on the cross-region OpenAI account,
+// because indexer skills (e.g., GenAISkill / ChatCompletionSkill) may call its chat
+// completions endpoint directly when used as the model backend for knowledge sources.
+module searchMiToCrossRegionOpenAIRoleAssignment 'modules-network-secured/search-mi-to-openai-role-assignment.bicep' = if (deployCrossRegionOpenAI) {
+  name: 'search-mi-xregion-openai-ra-${uniqueSuffix}-deployment'
+  params: {
+    accountName: crossRegionOpenAIName
+    searchServicePrincipalId: aiDependencies.outputs.aiSearchPrincipalId
+  }
+  dependsOn: [
+    aiSearch
+    crossRegionOpenAI
+    privateEndpointAndDNS
+  ]
+}
+
+// Shared Private Link: Search service -> AI Services account (openai_account groupId).
+// Provides a private route that built-in indexer skills (e.g. AzureOpenAIEmbeddingSkill)
+// use automatically when the resourceUri matches. Custom Web API skills like
+// ChatCompletionSkill don't auto-route through SPL — those are covered by the
+// `publicNetworkAccess: Enabled` + `bypass: AzureServices` setting on the AI account.
+module searchToAiServicesSharedPrivateLink 'modules-network-secured/search-shared-private-link-to-aiservices.bicep' = {
+  name: 'search-spl-aiservices-${uniqueSuffix}-deployment'
+  params: {
+    location: location
+    searchServiceName: aiDependencies.outputs.aiSearchName
+    aiServicesAccountName: aiAccount.outputs.accountName
+  }
+  dependsOn: [
+    aiSearch
+    aiAccount
+    privateEndpointAndDNS
+    searchMiToOpenAIRoleAssignment
+  ]
+}
+
 // Account MI needs Search Index Data Contributor + Search Service Contributor
 module accountToSearchRoleAssignment 'modules-network-secured/ai-account-to-search-role-assignment.bicep' = {
   name: 'account-search-ra-${uniqueSuffix}-deployment'
