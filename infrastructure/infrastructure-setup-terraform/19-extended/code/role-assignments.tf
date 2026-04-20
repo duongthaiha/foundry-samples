@@ -109,6 +109,18 @@ resource "azurerm_role_assignment" "search_mi_cognitive_services_openai_user" {
   principal_type     = "ServicePrincipal"
 }
 
+# ---- Search MI → Cross-region OpenAI account (Cognitive Services OpenAI User) ----
+# Some indexer skills (e.g. GenAISkill / ChatCompletionSkill) may call the
+# cross-region OpenAI's chat completions endpoint when used as the model backend
+# for knowledge sources.
+resource "azurerm_role_assignment" "search_mi_cross_region_openai_user" {
+  count              = local.cross_region_enabled && local.effective_search_principal_id != null ? 1 : 0
+  scope              = azapi_resource.cross_region_openai[0].id
+  role_definition_id = "/subscriptions/${data.azurerm_client_config.current.subscription_id}/providers/Microsoft.Authorization/roleDefinitions/${local.role_ids.cognitive_services_openai_user}"
+  principal_id       = local.effective_search_principal_id
+  principal_type     = "ServicePrincipal"
+}
+
 # =============================================================================
 # POST-CAPHOST assignments
 # =============================================================================

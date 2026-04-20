@@ -22,8 +22,14 @@ resource "azapi_resource" "ai_account" {
     properties = {
       allowProjectManagement = true
       customSubDomainName    = local.account_name
-      publicNetworkAccess    = "Disabled"
-      disableLocalAuth       = false
+      # Public access must be Enabled (not Disabled) for the `bypass: AzureServices`
+      # network ACL to take effect. With defaultAction=Deny, no public traffic is
+      # allowed except trusted Microsoft services (e.g. Azure AI Search indexer
+      # skills like ChatCompletionSkill that call OpenAI chat completions).
+      # All non-trusted traffic still flows via the private endpoints in
+      # private-endpoint-and-dns.tf.
+      publicNetworkAccess = "Enabled"
+      disableLocalAuth    = false
       networkAcls = {
         defaultAction       = "Deny"
         virtualNetworkRules = []
