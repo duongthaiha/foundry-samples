@@ -199,6 +199,53 @@ az network private-endpoint list \
   --output table
 ```
 
+## Deploy via GitHub Actions
+
+The repo ships a reusable workflow at [`.github/workflows/deploy-template-19.yml`](../../../.github/workflows/deploy-template-19.yml) that deploys this template to Azure using **OIDC federated credentials** (no long-lived secrets).
+
+### One-time setup
+
+1. **Create an App Registration** (or User-Assigned Managed Identity) in Azure AD and assign it **Contributor** (plus **User Access Administrator** if the deployment creates role assignments) on the target subscription or resource group.
+2. **Configure federated credentials** on that identity for this repo. See [Azure docs](https://learn.microsoft.com/azure/developer/github/connect-from-azure-openid-connect). Typical subjects:
+   - `repo:<owner>/<repo>:ref:refs/heads/main`
+   - `repo:<owner>/<repo>:pull_request`
+   - `repo:<owner>/<repo>:environment:azure-dev` (if you enable the optional `environment:` gate)
+3. **Add three repo (or environment) secrets**: `AZURE_CLIENT_ID`, `AZURE_TENANT_ID`, `AZURE_SUBSCRIPTION_ID`.
+
+### Running the workflow
+
+Trigger it from **Actions → Deploy Template 19 (Hybrid Private Resources) → Run workflow** with:
+
+| Input | Purpose |
+|---|---|
+| `resourceGroup`, `location` | Target RG (created if missing) and region |
+| `mode` | `validate` / `whatif` / `deploy` |
+| `runner` | `github-hosted` (default) or `self-hosted` — **see networking options below** |
+| `deployApiManagement`, `deployApplicationInsights`, `deployBastion`, `deployVpnGateway`, `deployWorkflow`, `deployTeamsPublishing` | Feature toggles that override `main.bicepparam` |
+
+Pull requests that touch this folder automatically run in **what-if mode** so reviewers can see the diff.
+
+### Private-network connectivity — runner options
+
+Because this template deploys the Foundry account with `publicNetworkAccess: Disabled` and places supporting services behind private endpoints, some deploy steps can only run from inside the VNet:
+
+- **ARM control-plane calls** (`az deployment group create`, resource provisioning, role assignments, private endpoint creation) go to `management.azure.com` which is always public → any runner works.
+- **Data-plane calls** (Foundry Agent Application creation, workflow agent deployment, Teams publishing, Foundry IQ knowledge source creation) hit private FQDNs that only resolve to private IPs inside the VNet → a public runner **cannot** reach them.
+
+The workflow enforces this: if you select `runner=github-hosted` **and** enable `deployWorkflow` or `deployTeamsPublishing`, the preflight job fails fast.
+
+Choose the approach that matches your environment:
+
+| Option | When to use | How |
+|---|---|---|
+| **A. GitHub-hosted runner, IaC only** *(default)* | You just want the private infrastructure provisioned and will complete Teams / workflow / knowledge-source setup separately from a jump box or VPN-connected machine. | Leave `runner=github-hosted`. Keep `deployWorkflow=false`, `deployTeamsPublishing=false`. |
+| **B. Self-hosted runner inside the VNet** | You want a single CI run to provision infra **and** run data-plane steps. | Deploy the jump box (`deployBastion=true`), install the [GitHub Actions self-hosted runner](https://docs.github.com/actions/hosting-your-own-runners) on it with labels `self-hosted,linux,azure-private`, register it against this repo, then set `runner=self-hosted` on the workflow. Adjust `selfHostedLabels` if you use different labels. |
+| **C. GitHub-hosted larger runners with Azure private networking** | GitHub Enterprise Cloud customer who wants zero runner ops. | Follow [GitHub's private networking docs](https://docs.github.com/en/enterprise-cloud@latest/actions/concepts/runners/private-networking) to attach larger runners to a delegated subnet, then set `runner=self-hosted` and use the larger-runner label in `selfHostedLabels`. |
+| **D. Temporarily enable public access on Foundry** | Not recommended — opens the account to the public internet during the deploy window. | Set the account `publicNetworkAccess=Enabled` before deploy, run the workflow, then flip back. |
+| **E. VNet-integrated deploymentScripts** *(template change, future work)* | You want Teams / workflow publishing to complete even from a public runner. | Add `containerSettings.subnetIds` (pointing to a subnet delegated to `Microsoft.ContainerInstance/containerGroups`) to the `Microsoft.Resources/deploymentScripts` resources in `modules-network-secured/teams-agent-publish-script.bicep` and `modules-network-secured/workflow-deployment.bicep`. |
+
+On `runner=self-hosted` deploys the workflow runs a smoke-test step that resolves the AI Services FQDN and asserts it returns an RFC1918 private IP, catching broken private-DNS wiring early.
+
 ## APIM AI Gateway
 
 When APIM is deployed, the template automatically:
