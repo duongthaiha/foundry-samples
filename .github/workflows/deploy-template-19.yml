@@ -1,0 +1,347 @@
+name: Deploy Template 19 (Hybrid Private Resources)
+
+# Deploys infrastructure/infrastructure-setup-bicep/19-hybrid-private-resources-agent-setup
+# to Azure. Supports what-if / validate / deploy modes and both GitHub-hosted and
+# self-hosted runners (the latter is required if you need to run data-plane steps
+# such as deployWorkflow or deployTeamsPublishing against a private Foundry account).
+#
+# Required repo/environment secrets (OIDC, no client secrets):
+#   AZURE_CLIENT_ID        - App Registration / UAMI client ID with federated credential
+#   AZURE_TENANT_ID
+#   AZURE_SUBSCRIPTION_ID
+#
+# See the "Deploy via GitHub Actions" section in the template 19 README for setup.
+
+on:
+  workflow_dispatch:
+    inputs:
+      resourceGroup:
+        description: Target resource group name (created if missing)
+        type: string
+        default: rg-hybrid-agent-test
+      location:
+        description: Azure region
+        type: string
+        default: norwayeast
+      deploymentName:
+        description: ARM deployment name (empty = auto-generated per run)
+        type: string
+        default: ''
+      mode:
+        description: What the workflow should do
+        type: choice
+        default: whatif
+        options:
+          - validate
+          - whatif
+          - deploy
+      runner:
+        description: Runner to use. Use self-hosted (in-VNet) for data-plane toggles.
+        type: choice
+        default: github-hosted
+        options:
+          - github-hosted
+          - self-hosted
+      selfHostedLabels:
+        description: CSV runner labels when runner=self-hosted
+        type: string
+        default: self-hosted,linux,azure-private
+      deployApiManagement:
+        description: Deploy APIM (control-plane only, safe on GH-hosted)
+        type: boolean
+        default: false
+      deployApplicationInsights:
+        description: Deploy Application Insights
+        type: boolean
+        default: true
+      deployBastion:
+        description: Deploy Bastion + jump box
+        type: boolean
+        default: false
+      deployVpnGateway:
+        description: Deploy VPN Gateway
+        type: boolean
+        default: false
+      deployWorkflow:
+        description: Deploy workflow agents (requires self-hosted runner; data-plane)
+        type: boolean
+        default: false
+      deployTeamsPublishing:
+        description: Deploy Teams publishing (requires self-hosted runner; data-plane)
+        type: boolean
+        default: false
+  pull_request:
+    branches: [main]
+    paths:
+      - infrastructure/infrastructure-setup-bicep/19-hybrid-private-resources-agent-setup/**
+      - .github/workflows/deploy-template-19.yml
+
+permissions:
+  id-token: write
+  contents: read
+  pull-requests: write
+
+concurrency:
+  # Serialise deployments per target RG; PRs serialise per PR.
+  group: deploy-template-19-${{ github.event_name == 'workflow_dispatch' && inputs.resourceGroup || github.ref }}
+  cancel-in-progress: false
+
+env:
+  TEMPLATE_DIR: infrastructure/infrastructure-setup-bicep/19-hybrid-private-resources-agent-setup
+
+jobs:
+  preflight:
+    name: Preflight
+    runs-on: ubuntu-latest
+    outputs:
+      runsOn: ${{ steps.runner.outputs.runsOn }}
+      effectiveMode: ${{ steps.mode.outputs.effectiveMode }}
+      deploymentName: ${{ steps.name.outputs.deploymentName }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Compute effective mode
+        id: mode
+        shell: bash
+        run: |
+          set -e
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            echo "effectiveMode=whatif" >> "$GITHUB_OUTPUT"
+          else
+            echo "effectiveMode=${{ inputs.mode }}" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Compute deployment name
+        id: name
+        shell: bash
+        run: |
+          set -e
+          NAME="${{ github.event_name == 'workflow_dispatch' && inputs.deploymentName || '' }}"
+          if [ -z "$NAME" ]; then
+            NAME="template19-${{ github.run_id }}-${{ github.run_attempt }}"
+          fi
+          echo "deploymentName=$NAME" >> "$GITHUB_OUTPUT"
+
+      - name: Resolve runs-on label
+        id: runner
+        shell: bash
+        run: |
+          set -e
+          RUNNER="${{ github.event_name == 'workflow_dispatch' && inputs.runner || 'github-hosted' }}"
+          if [ "$RUNNER" = "self-hosted" ]; then
+            LABELS="${{ inputs.selfHostedLabels }}"
+            # Convert CSV -> JSON array for runs-on
+            JSON=$(echo "$LABELS" | awk -F',' '{
+              printf "[";
+              for (i=1; i<=NF; i++) {
+                gsub(/^[ \t]+|[ \t]+$/, "", $i);
+                printf "%s\"%s\"", (i>1 ? "," : ""), $i
+              }
+              printf "]"
+            }')
+            echo "runsOn=$JSON" >> "$GITHUB_OUTPUT"
+          else
+            echo 'runsOn="ubuntu-latest"' >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Runner / feature-toggle compatibility gate
+        if: github.event_name == 'workflow_dispatch'
+        shell: bash
+        run: |
+          set -e
+          RUNNER="${{ inputs.runner }}"
+          WORKFLOW="${{ inputs.deployWorkflow }}"
+          TEAMS="${{ inputs.deployTeamsPublishing }}"
+          if [ "$RUNNER" = "github-hosted" ] && { [ "$WORKFLOW" = "true" ] || [ "$TEAMS" = "true" ]; }; then
+            echo "::error::deployWorkflow and deployTeamsPublishing require data-plane access to a private Foundry endpoint."
+            echo "::error::A GitHub-hosted runner cannot reach private endpoints. Set runner=self-hosted or disable these toggles."
+            echo "::error::See the 'Deploy via GitHub Actions' section in the template 19 README for runner options."
+            exit 1
+          fi
+
+      - name: Install Bicep & sanity-build main.bicep
+        shell: bash
+        run: |
+          set -e
+          curl -sLo bicep https://github.com/Azure/bicep/releases/latest/download/bicep-linux-x64
+          chmod +x bicep
+          sudo mv bicep /usr/local/bin/bicep
+          bicep --version
+          bicep build "${TEMPLATE_DIR}/main.bicep" --outfile /tmp/main.json
+          echo "Bicep build OK."
+
+  validate:
+    name: Validate & What-If
+    needs: preflight
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ${{ fromJSON(needs.preflight.outputs.runsOn) }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Azure login (OIDC)
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Ensure resource group exists
+        if: needs.preflight.outputs.effectiveMode != 'validate'
+        shell: bash
+        run: |
+          set -e
+          RG="${{ github.event_name == 'workflow_dispatch' && inputs.resourceGroup || 'rg-hybrid-agent-test' }}"
+          LOC="${{ github.event_name == 'workflow_dispatch' && inputs.location || 'norwayeast' }}"
+          if ! az group show -n "$RG" >/dev/null 2>&1; then
+            echo "Creating resource group $RG in $LOC"
+            az group create -n "$RG" -l "$LOC" --only-show-errors >/dev/null
+          else
+            echo "Resource group $RG already exists."
+          fi
+
+      - name: Build parameter overrides
+        id: params
+        shell: bash
+        run: |
+          set -e
+          # Only override params when running via workflow_dispatch; PR runs use defaults from main.bicepparam.
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            OVR="location=${{ inputs.location }}"
+            OVR="$OVR deployApiManagement=${{ inputs.deployApiManagement }}"
+            OVR="$OVR deployApplicationInsights=${{ inputs.deployApplicationInsights }}"
+            OVR="$OVR deployBastion=${{ inputs.deployBastion }}"
+            OVR="$OVR deployVpnGateway=${{ inputs.deployVpnGateway }}"
+            OVR="$OVR deployWorkflow=${{ inputs.deployWorkflow }}"
+            OVR="$OVR deployTeamsPublishing=${{ inputs.deployTeamsPublishing }}"
+            echo "overrides=$OVR" >> "$GITHUB_OUTPUT"
+          else
+            echo "overrides=" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: az deployment group validate
+        shell: bash
+        run: |
+          set -e
+          RG="${{ github.event_name == 'workflow_dispatch' && inputs.resourceGroup || 'rg-hybrid-agent-test' }}"
+          # For pure validate (no RG yet), use `az deployment sub what-if`-style dry run via validate against a scratch RG name only if RG exists.
+          if ! az group show -n "$RG" >/dev/null 2>&1; then
+            echo "Resource group $RG does not exist; skipping validate (mode=validate without pre-created RG)."
+            exit 0
+          fi
+          az deployment group validate \
+            --resource-group "$RG" \
+            --template-file "${TEMPLATE_DIR}/main.bicep" \
+            --parameters "${TEMPLATE_DIR}/main.bicepparam" \
+            ${{ steps.params.outputs.overrides != '' && format('--parameters {0}', steps.params.outputs.overrides) || '' }} \
+            --only-show-errors
+
+      - name: az deployment group what-if
+        if: needs.preflight.outputs.effectiveMode != 'validate'
+        shell: bash
+        run: |
+          set -e
+          RG="${{ github.event_name == 'workflow_dispatch' && inputs.resourceGroup || 'rg-hybrid-agent-test' }}"
+          az deployment group what-if \
+            --resource-group "$RG" \
+            --name "${{ needs.preflight.outputs.deploymentName }}-whatif" \
+            --template-file "${TEMPLATE_DIR}/main.bicep" \
+            --parameters "${TEMPLATE_DIR}/main.bicepparam" \
+            ${{ steps.params.outputs.overrides != '' && format('--parameters {0}', steps.params.outputs.overrides) || '' }} \
+            --result-format FullResourcePayloads \
+            --only-show-errors | tee /tmp/whatif.txt
+          {
+            echo "## What-If Results"
+            echo ""
+            echo '```'
+            tail -c 60000 /tmp/whatif.txt
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  deploy:
+    name: Deploy
+    needs: [preflight, validate]
+    if: github.event_name == 'workflow_dispatch' && needs.preflight.outputs.effectiveMode == 'deploy'
+    runs-on: ${{ fromJSON(needs.preflight.outputs.runsOn) }}
+    # Uncomment to require approval via GitHub environment rules:
+    # environment: azure-dev
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Azure login (OIDC)
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: az deployment group create
+        id: create
+        shell: bash
+        run: |
+          set -e
+          RG="${{ inputs.resourceGroup }}"
+          NAME="${{ needs.preflight.outputs.deploymentName }}"
+          OVR="location=${{ inputs.location }} \
+            deployApiManagement=${{ inputs.deployApiManagement }} \
+            deployApplicationInsights=${{ inputs.deployApplicationInsights }} \
+            deployBastion=${{ inputs.deployBastion }} \
+            deployVpnGateway=${{ inputs.deployVpnGateway }} \
+            deployWorkflow=${{ inputs.deployWorkflow }} \
+            deployTeamsPublishing=${{ inputs.deployTeamsPublishing }}"
+          echo "Deploying $NAME to $RG"
+          az deployment group create \
+            --resource-group "$RG" \
+            --name "$NAME" \
+            --template-file "${TEMPLATE_DIR}/main.bicep" \
+            --parameters "${TEMPLATE_DIR}/main.bicepparam" \
+            --parameters $OVR \
+            --only-show-errors \
+            --output json > /tmp/deploy.json
+          echo "Deployment succeeded."
+
+      - name: Publish deployment outputs
+        if: always() && steps.create.outcome == 'success'
+        shell: bash
+        run: |
+          set -e
+          {
+            echo "## Deployment Outputs"
+            echo ""
+            echo "Deployment name: \`${{ needs.preflight.outputs.deploymentName }}\`"
+            echo "Resource group:  \`${{ inputs.resourceGroup }}\`"
+            echo ""
+            echo '```json'
+            jq '.properties.outputs // {}' /tmp/deploy.json
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Private-endpoint smoke test (self-hosted only)
+        if: inputs.runner == 'self-hosted'
+        shell: bash
+        run: |
+          set -e
+          # Extract the AI Services account name from deployment outputs (best-effort).
+          ACCOUNT=$(jq -r '.properties.outputs.accountName.value // empty' /tmp/deploy.json 2>/dev/null || true)
+          if [ -z "$ACCOUNT" ]; then
+            # Fall back: resolve aiServices param + uniqueSuffix derived from RG id.
+            echo "No accountName output — skipping DNS smoke test."
+            exit 0
+          fi
+          FQDN="${ACCOUNT}.services.ai.azure.com"
+          echo "Resolving $FQDN ..."
+          IP=$(getent hosts "$FQDN" | awk '{print $1}' | head -1 || true)
+          if [ -z "$IP" ]; then
+            echo "::warning::Could not resolve $FQDN from this runner."
+            exit 0
+          fi
+          echo "Resolved to $IP"
+          # RFC1918: 10/8, 172.16/12, 192.168/16
+          if echo "$IP" | grep -Eq '^(10\.|192\.168\.|172\.(1[6-9]|2[0-9]|3[0-1])\.)'; then
+            echo "✅ Private IP — private DNS zone wiring looks correct."
+          else
+            echo "::error::$FQDN resolved to public IP $IP — private DNS zone wiring may be broken."
+            exit 1
+          fi
