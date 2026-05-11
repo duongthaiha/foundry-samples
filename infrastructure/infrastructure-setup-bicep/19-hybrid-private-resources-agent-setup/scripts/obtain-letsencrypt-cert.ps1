@@ -1,4 +1,4 @@
-#!/usr/bin/env pwsh
+﻿#!/usr/bin/env pwsh
 <#
 .SYNOPSIS
     Obtains a Let's Encrypt TLS certificate via DNS-01 challenge and imports it to Azure Key Vault.
