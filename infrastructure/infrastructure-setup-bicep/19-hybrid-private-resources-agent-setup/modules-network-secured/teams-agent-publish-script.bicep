@@ -129,7 +129,7 @@ resource publishScript 'Microsoft.Resources/deploymentScripts@2023-08-01' = {
           deploymentType = "Managed"
           protocols = @(
             @{ protocol = "Responses"; version = "1.0" }
-            @{ protocol = "ActivityProtocol"; version = "1.0" }
+            @{ protocol = "Activity"; version = "1.0" }
           )
           agents = @(@{ agentName = $env:AGENT_NAME; agentVersion = "$agentVersion" })
         }

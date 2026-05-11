@@ -73,6 +73,24 @@
     },
     "deployTeamsPublishing": {
       "value": "${DEPLOY_TEAMS_PUBLISHING=false}"
+    },
+    "deployTeamsPublishScript": {
+      "value": "${DEPLOY_TEAMS_PUBLISH_SCRIPT=true}"
+    },
+    "botClientIdOverride": {
+      "value": "${BOT_CLIENT_ID=}"
+    },
+    "activityProtocolUrlOverride": {
+      "value": "${ACTIVITY_PROTOCOL_URL=}"
+    },
+    "teamsCustomDomain": {
+      "value": "${TEAMS_CUSTOM_DOMAIN=}"
+    },
+    "teamsAgentName": {
+      "value": "${TEAMS_AGENT_NAME=marketing-pipeline}"
+    },
+    "teamsApplicationName": {
+      "value": "${TEAMS_APPLICATION_NAME=marketing-pipeline-app}"
     }
   }
 }

@@ -5,7 +5,7 @@
     "_generator": {
       "name": "bicep",
       "version": "0.42.1.51946",
-      "templateHash": "5008776835750611855"
+      "templateHash": "274640955337688315"
     }
   },
   "parameters": {
@@ -369,6 +369,27 @@
       "defaultValue": false,
       "metadata": {
         "description": "Set to true to deploy Teams publishing infrastructure (App Gateway, Bot Service, Teams Channel)."
+      }
+    },
+    "deployTeamsPublishScript": {
+      "type": "bool",
+      "defaultValue": true,
+      "metadata": {
+        "description": "Set to true to run the data-plane deploymentScript that creates the Agent Application + Activity Protocol deployment. When the Foundry account is private (publicNetworkAccess=Disabled or networkAcls.defaultAction=Deny), the deploymentScript ACI cannot reach the Foundry data plane and this MUST be set to false; pre-create the application + deployment from inside the VNet (e.g. jumpbox) and pass botClientIdOverride + activityProtocolUrlOverride."
+      }
+    },
+    "botClientIdOverride": {
+      "type": "string",
+      "defaultValue": "",
+      "metadata": {
+        "description": "Bot Client ID override (Entra app client ID of the Foundry Agent Application). Only used when deployTeamsPublishScript=false."
+      }
+    },
+    "activityProtocolUrlOverride": {
+      "type": "string",
+      "defaultValue": "",
+      "metadata": {
+        "description": "Activity Protocol URL override (https://<account>.services.ai.azure.com/api/projects/<project>/applications/<app>/protocols/activityprotocol). Only used when deployTeamsPublishScript=false."
       }
     },
     "teamsCustomDomain": {
@@ -5469,7 +5490,7 @@
       ]
     },
     {
-      "condition": "[parameters('deployTeamsPublishing')]",
+      "condition": "[and(parameters('deployTeamsPublishing'), parameters('deployTeamsPublishScript'))]",
       "type": "Microsoft.Resources/deployments",
       "apiVersion": "2025-04-01",
       "name": "[format('teams-publish-{0}-deployment', variables('uniqueSuffix'))]",
@@ -5502,7 +5523,7 @@
             "_generator": {
               "name": "bicep",
               "version": "0.42.1.51946",
-              "templateHash": "5451916073150111780"
+              "templateHash": "16924996245168856512"
             }
           },
           "parameters": {
@@ -5635,7 +5656,7 @@
                     "value": "[resourceGroup().name]"
                   }
                 ],
-                "scriptContent": "      $ErrorActionPreference = 'Stop'\r\n\r\n      $armBase = \"https://management.azure.com/subscriptions/$($env:SUBSCRIPTION_ID)/resourceGroups/$($env:RESOURCE_GROUP)/providers/Microsoft.CognitiveServices/accounts/$($env:ACCOUNT_NAME)/projects/$($env:PROJECT_NAME)\"\r\n\r\n      # Get ARM token\r\n      $armToken = (Get-AzAccessToken -ResourceUrl \"https://management.azure.com\").Token\r\n      $armHeaders = @{\r\n        \"Authorization\" = \"Bearer $armToken\"\r\n        \"Content-Type\" = \"application/json\"\r\n      }\r\n\r\n      # Resolve agent version if not specified\r\n      $agentVersion = $env:AGENT_VERSION\r\n      if ([string]::IsNullOrEmpty($agentVersion)) {\r\n        $aiToken = (Get-AzAccessToken -ResourceUrl \"https://ai.azure.com\").Token\r\n        $aiHeaders = @{ \"Authorization\" = \"Bearer $aiToken\"; \"Content-Type\" = \"application/json\" }\r\n        $baseUrl = \"https://$($env:ACCOUNT_NAME).services.ai.azure.com/api/projects/$($env:PROJECT_NAME)\"\r\n        $versions = Invoke-RestMethod -Uri \"$baseUrl/agents/$($env:AGENT_NAME)/versions?api-version=v1\" -Headers $aiHeaders\r\n        $agentVersion = $versions.data[0].version\r\n        Write-Host \"Resolved latest agent version: $agentVersion\"\r\n      }\r\n\r\n      # Create Agent Application\r\n      $appBody = @{\r\n        properties = @{\r\n          agents = @(@{ agentName = $env:AGENT_NAME })\r\n          displayName = \"$($env:APP_NAME)\"\r\n          description = \"Published agent for Teams integration\"\r\n        }\r\n      } | ConvertTo-Json -Depth 5\r\n      try {\r\n        $appResult = Invoke-RestMethod -Uri \"$armBase/applications/$($env:APP_NAME)?api-version=2026-01-15-preview\" -Method Put -Headers $armHeaders -Body $appBody\r\n        Write-Host \"Created application: $($env:APP_NAME)\"\r\n      } catch {\r\n        Write-Host \"Application may already exist, continuing...\"\r\n      }\r\n\r\n      # Create Managed Deployment\r\n      $deployBody = @{\r\n        properties = @{\r\n          displayName = \"Teams Deployment\"\r\n          deploymentType = \"Managed\"\r\n          protocols = @(\r\n            @{ protocol = \"Responses\"; version = \"1.0\" }\r\n            @{ protocol = \"ActivityProtocol\"; version = \"1.0\" }\r\n          )\r\n          agents = @(@{ agentName = $env:AGENT_NAME; agentVersion = \"$agentVersion\" })\r\n        }\r\n      } | ConvertTo-Json -Depth 5\r\n      try {\r\n        $deployResult = Invoke-RestMethod -Uri \"$armBase/applications/$($env:APP_NAME)/agentdeployments/$($env:DEPLOY_NAME)?api-version=2026-01-15-preview\" -Method Put -Headers $armHeaders -Body $deployBody\r\n        Write-Host \"Created deployment: $($env:DEPLOY_NAME)\"\r\n      } catch {\r\n        Write-Host \"Deployment may already exist, continuing...\"\r\n      }\r\n\r\n      # Get the application details for the Activity Protocol URL\r\n      $app = Invoke-RestMethod -Uri \"$armBase/applications/$($env:APP_NAME)?api-version=2026-01-15-preview\" -Method Get -Headers $armHeaders\r\n      $baseUrl = $app.properties.baseUrl\r\n      $activityUrl = \"$baseUrl/protocols/activityprotocol\"\r\n      $botClientId = $app.properties.defaultInstanceIdentity.clientId\r\n\r\n      Write-Host \"Activity Protocol URL: $activityUrl\"\r\n      Write-Host \"Bot Client ID: $botClientId\"\r\n\r\n      $DeploymentScriptOutputs = @{\r\n        activityProtocolUrl = $activityUrl\r\n        applicationBaseUrl = $baseUrl\r\n        botClientId = $botClientId\r\n        agentVersion = \"$agentVersion\"\r\n      }\r\n    "
+                "scriptContent": "      $ErrorActionPreference = 'Stop'\r\n\r\n      $armBase = \"https://management.azure.com/subscriptions/$($env:SUBSCRIPTION_ID)/resourceGroups/$($env:RESOURCE_GROUP)/providers/Microsoft.CognitiveServices/accounts/$($env:ACCOUNT_NAME)/projects/$($env:PROJECT_NAME)\"\r\n\r\n      # Get ARM token\r\n      $armToken = (Get-AzAccessToken -ResourceUrl \"https://management.azure.com\").Token\r\n      $armHeaders = @{\r\n        \"Authorization\" = \"Bearer $armToken\"\r\n        \"Content-Type\" = \"application/json\"\r\n      }\r\n\r\n      # Resolve agent version if not specified\r\n      $agentVersion = $env:AGENT_VERSION\r\n      if ([string]::IsNullOrEmpty($agentVersion)) {\r\n        $aiToken = (Get-AzAccessToken -ResourceUrl \"https://ai.azure.com\").Token\r\n        $aiHeaders = @{ \"Authorization\" = \"Bearer $aiToken\"; \"Content-Type\" = \"application/json\" }\r\n        $baseUrl = \"https://$($env:ACCOUNT_NAME).services.ai.azure.com/api/projects/$($env:PROJECT_NAME)\"\r\n        $versions = Invoke-RestMethod -Uri \"$baseUrl/agents/$($env:AGENT_NAME)/versions?api-version=v1\" -Headers $aiHeaders\r\n        $agentVersion = $versions.data[0].version\r\n        Write-Host \"Resolved latest agent version: $agentVersion\"\r\n      }\r\n\r\n      # Create Agent Application\r\n      $appBody = @{\r\n        properties = @{\r\n          agents = @(@{ agentName = $env:AGENT_NAME })\r\n          displayName = \"$($env:APP_NAME)\"\r\n          description = \"Published agent for Teams integration\"\r\n        }\r\n      } | ConvertTo-Json -Depth 5\r\n      try {\r\n        $appResult = Invoke-RestMethod -Uri \"$armBase/applications/$($env:APP_NAME)?api-version=2026-01-15-preview\" -Method Put -Headers $armHeaders -Body $appBody\r\n        Write-Host \"Created application: $($env:APP_NAME)\"\r\n      } catch {\r\n        Write-Host \"Application may already exist, continuing...\"\r\n      }\r\n\r\n      # Create Managed Deployment\r\n      $deployBody = @{\r\n        properties = @{\r\n          displayName = \"Teams Deployment\"\r\n          deploymentType = \"Managed\"\r\n          protocols = @(\r\n            @{ protocol = \"Responses\"; version = \"1.0\" }\r\n            @{ protocol = \"Activity\"; version = \"1.0\" }\r\n          )\r\n          agents = @(@{ agentName = $env:AGENT_NAME; agentVersion = \"$agentVersion\" })\r\n        }\r\n      } | ConvertTo-Json -Depth 5\r\n      try {\r\n        $deployResult = Invoke-RestMethod -Uri \"$armBase/applications/$($env:APP_NAME)/agentdeployments/$($env:DEPLOY_NAME)?api-version=2026-01-15-preview\" -Method Put -Headers $armHeaders -Body $deployBody\r\n        Write-Host \"Created deployment: $($env:DEPLOY_NAME)\"\r\n      } catch {\r\n        Write-Host \"Deployment may already exist, continuing...\"\r\n      }\r\n\r\n      # Get the application details for the Activity Protocol URL\r\n      $app = Invoke-RestMethod -Uri \"$armBase/applications/$($env:APP_NAME)?api-version=2026-01-15-preview\" -Method Get -Headers $armHeaders\r\n      $baseUrl = $app.properties.baseUrl\r\n      $activityUrl = \"$baseUrl/protocols/activityprotocol\"\r\n      $botClientId = $app.properties.defaultInstanceIdentity.clientId\r\n\r\n      Write-Host \"Activity Protocol URL: $activityUrl\"\r\n      Write-Host \"Bot Client ID: $botClientId\"\r\n\r\n      $DeploymentScriptOutputs = @{\r\n        activityProtocolUrl = $activityUrl\r\n        applicationBaseUrl = $baseUrl\r\n        botClientId = $botClientId\r\n        agentVersion = \"$agentVersion\"\r\n      }\r\n    "
               },
               "dependsOn": [
                 "[extensionResourceId(resourceId('Microsoft.CognitiveServices/accounts', parameters('accountName')), 'Microsoft.Authorization/roleAssignments', guid(resourceId('Microsoft.CognitiveServices/accounts', parameters('accountName')), resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', format('{0}-publish-identity', parameters('applicationName'))), 'ai-developer-teams-publish'))]",
@@ -5704,8 +5725,8 @@
           "customDomain": {
             "value": "[parameters('teamsCustomDomain')]"
           },
-          "botClientId": "[if(parameters('deployTeamsPublishing'), createObject('value', reference(resourceId('Microsoft.Resources/deployments', format('teams-publish-{0}-deployment', variables('uniqueSuffix'))), '2025-04-01').outputs.botClientId.value), createObject('value', ''))]",
-          "activityProtocolUrl": "[if(parameters('deployTeamsPublishing'), createObject('value', reference(resourceId('Microsoft.Resources/deployments', format('teams-publish-{0}-deployment', variables('uniqueSuffix'))), '2025-04-01').outputs.activityProtocolUrl.value), createObject('value', ''))]",
+          "botClientId": "[if(parameters('deployTeamsPublishScript'), createObject('value', reference(resourceId('Microsoft.Resources/deployments', format('teams-publish-{0}-deployment', variables('uniqueSuffix'))), '2025-04-01').outputs.botClientId.value), createObject('value', parameters('botClientIdOverride')))]",
+          "activityProtocolUrl": "[if(parameters('deployTeamsPublishScript'), createObject('value', reference(resourceId('Microsoft.Resources/deployments', format('teams-publish-{0}-deployment', variables('uniqueSuffix'))), '2025-04-01').outputs.activityProtocolUrl.value), createObject('value', parameters('activityProtocolUrlOverride')))]",
           "apimPrivateIp": {
             "value": ""
           }
@@ -5717,7 +5738,7 @@
             "_generator": {
               "name": "bicep",
               "version": "0.42.1.51946",
-              "templateHash": "2427991491079955608"
+              "templateHash": "16484221479051765742"
             }
           },
           "parameters": {
@@ -5849,8 +5870,14 @@
               "name": "[variables('appGwPipName')]",
               "location": "[parameters('location')]",
               "sku": {
-                "name": "Standard"
+                "name": "Standard",
+                "tier": "Regional"
               },
+              "zones": [
+                "1",
+                "2",
+                "3"
+              ],
               "properties": {
                 "publicIPAllocationMethod": "Static"
               }

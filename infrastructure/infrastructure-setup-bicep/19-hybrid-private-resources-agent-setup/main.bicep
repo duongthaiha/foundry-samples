@@ -181,6 +181,15 @@ param deployWorkflow bool = false
 @description('Set to true to deploy Teams publishing infrastructure (App Gateway, Bot Service, Teams Channel).')
 param deployTeamsPublishing bool = false
 
+@description('Set to true to run the data-plane deploymentScript that creates the Agent Application + Activity Protocol deployment. When the Foundry account is private (publicNetworkAccess=Disabled or networkAcls.defaultAction=Deny), the deploymentScript ACI cannot reach the Foundry data plane and this MUST be set to false; pre-create the application + deployment from inside the VNet (e.g. jumpbox) and pass botClientIdOverride + activityProtocolUrlOverride.')
+param deployTeamsPublishScript bool = true
+
+@description('Bot Client ID override (Entra app client ID of the Foundry Agent Application). Only used when deployTeamsPublishScript=false.')
+param botClientIdOverride string = ''
+
+@description('Activity Protocol URL override (https://<account>.services.ai.azure.com/api/projects/<project>/applications/<app>/protocols/activityprotocol). Only used when deployTeamsPublishScript=false.')
+param activityProtocolUrlOverride string = ''
+
 @description('Custom domain for the Bot messaging endpoint (e.g., agent.yourcompany.com). Required when deployTeamsPublishing is true.')
 param teamsCustomDomain string = ''
 
@@ -788,7 +797,7 @@ module workflowDeployment 'modules-network-secured/workflow-deployment.bicep' = 
 }
 
 // Deploy Teams publishing infrastructure
-module teamsPublishScript 'modules-network-secured/teams-agent-publish-script.bicep' = if (deployTeamsPublishing) {
+module teamsPublishScript 'modules-network-secured/teams-agent-publish-script.bicep' = if (deployTeamsPublishing && deployTeamsPublishScript) {
   name: 'teams-publish-${uniqueSuffix}-deployment'
   params: {
     location: location
@@ -814,12 +823,11 @@ module teamsInfra 'modules-network-secured/teams-publishing-infra.bicep' = if (d
     projectName: aiProject.outputs.projectName
     applicationName: teamsApplicationName
     customDomain: teamsCustomDomain
-    botClientId: deployTeamsPublishing ? teamsPublishScript.outputs.botClientId : ''
-    activityProtocolUrl: deployTeamsPublishing ? teamsPublishScript.outputs.activityProtocolUrl : ''
+    botClientId: deployTeamsPublishScript ? teamsPublishScript.outputs.botClientId : botClientIdOverride
+    activityProtocolUrl: deployTeamsPublishScript ? teamsPublishScript.outputs.activityProtocolUrl : activityProtocolUrlOverride
     apimPrivateIp: '' // Set to APIM private endpoint IP for fully private deployments
   }
   dependsOn: [
-    teamsPublishScript
     apimDependencies
     privateEndpointAndDNS
   ]
