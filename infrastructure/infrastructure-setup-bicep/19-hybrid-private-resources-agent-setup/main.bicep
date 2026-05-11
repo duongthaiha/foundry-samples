@@ -140,6 +140,12 @@ param jumpboxSubnetPrefix string = '192.168.6.0/24'
 @secure()
 param jumpboxAdminPassword string = ''
 
+@description('VM size for the jump box. Default is Standard_D2s_v3 (broadly available). Standard_B2s_v2 is cheaper but not available in all regions (including parts of East US 2).')
+param jumpboxVmSize string = 'Standard_D2s_v3'
+
+@description('Set to true (default) to create a Shared Private Link from AI Search to AI Services for built-in indexer skills. Requires a deploymentScript that auto-provisions a storage account with shared-key auth. Set to false in subscriptions where Azure Policy blocks shared-key auth on storage accounts.')
+param deploySearchSharedPrivateLink bool = true
+
 @description('Set to true to deploy a VPN Gateway for site-to-site or point-to-site connectivity to the private VNet.')
 param deployVpnGateway bool = false
 
@@ -155,7 +161,7 @@ param gatewaySubnetPrefix string = '192.168.255.0/27'
   'VpnGw2AZ'
   'VpnGw3AZ'
 ])
-param vpnGatewaySku string = 'VpnGw1'
+param vpnGatewaySku string = 'VpnGw1AZ'
 
 @description('Set to true to deploy an Azure OpenAI resource in a different region and connect it to the Foundry account.')
 param deployCrossRegionOpenAI bool = false
@@ -581,7 +587,11 @@ module searchMiToCrossRegionOpenAIRoleAssignment 'modules-network-secured/search
 // use automatically when the resourceUri matches. Custom Web API skills like
 // ChatCompletionSkill don't auto-route through SPL — those are covered by the
 // `publicNetworkAccess: Enabled` + `bypass: AzureServices` setting on the AI account.
-module searchToAiServicesSharedPrivateLink 'modules-network-secured/search-shared-private-link-to-aiservices.bicep' = {
+//
+// Disable via deploySearchSharedPrivateLink=false when the subscription has Azure Policy
+// that blocks shared-key auth on storage accounts (deploymentScripts auto-provision
+// a storage account using shared keys; blocked accounts cause KeyBasedAuthenticationNotPermitted).
+module searchToAiServicesSharedPrivateLink 'modules-network-secured/search-shared-private-link-to-aiservices.bicep' = if (deploySearchSharedPrivateLink) {
   name: 'search-spl-aiservices-${uniqueSuffix}-deployment'
   params: {
     location: location
@@ -721,6 +731,7 @@ module bastionJumpbox 'modules-network-secured/bastion-jumpbox.bicep' = if (depl
     jumpboxSubnetPrefix: jumpboxSubnetPrefix
     bastionName: '${accountName}-bastion'
     vmName: '${uniqueSuffix}-jumpbox'
+    vmSize: jumpboxVmSize
     adminPassword: jumpboxAdminPassword
   }
 }
