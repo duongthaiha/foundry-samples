@@ -49,6 +49,9 @@ param keyVaultName string = ''
 @description('Name of the TLS certificate in Key Vault')
 param tlsCertName string = 'teams-bot-tls'
 
+@description('Set to true to auto-generate a self-signed TLS cert via deploymentScript. Set to false when a cert has been pre-imported to Key Vault (e.g. when Azure Policy blocks shared-key auth on auto-provisioned storage for deploymentScripts).')
+param createSelfSignedCert bool = true
+
 @description('Bot Client ID (msaAppId) — the Agent Application identity client ID')
 param botClientId string
 
@@ -118,7 +121,7 @@ resource appGwPip 'Microsoft.Network/publicIPAddresses@2024-05-01' = {
 // ---- Self-signed TLS Certificate (placeholder for testing) ----
 // In production, replace with a CA-issued certificate for your custom domain.
 // Upload via: az keyvault certificate import --vault-name <kv> --name teams-bot-tls --file cert.pfx
-resource certScript 'Microsoft.Resources/deploymentScripts@2023-08-01' = {
+resource certScript 'Microsoft.Resources/deploymentScripts@2023-08-01' = if (createSelfSignedCert) {
   name: '${finalKeyVaultName}-cert-script'
   location: location
   kind: 'AzurePowerShell'
@@ -334,12 +337,6 @@ resource appGw 'Microsoft.Network/applicationGateways@2024-05-01' = {
         }
       }
     ]
-    webApplicationFirewallConfiguration: {
-      enabled: true
-      firewallMode: 'Prevention'
-      ruleSetType: 'OWASP'
-      ruleSetVersion: '3.2'
-    }
     firewallPolicy: {
       id: wafPolicy.id
     }

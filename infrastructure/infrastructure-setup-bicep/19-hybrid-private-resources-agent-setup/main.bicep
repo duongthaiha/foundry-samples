@@ -190,6 +190,9 @@ param botClientIdOverride string = ''
 @description('Activity Protocol URL override (https://<account>.services.ai.azure.com/api/projects/<project>/applications/<app>/protocols/activityprotocol). Only used when deployTeamsPublishScript=false.')
 param activityProtocolUrlOverride string = ''
 
+@description('Set to true to auto-generate a self-signed TLS cert in Key Vault via deploymentScript. Set to false when a cert has been pre-imported (e.g. when Azure Policy blocks shared-key auth on deploymentScript storage). Default false because deploymentScripts auto-provision storage with shared-key auth which is commonly disabled.')
+param createTeamsTlsCert bool = false
+
 @description('Custom domain for the Bot messaging endpoint (e.g., agent.yourcompany.com). Required when deployTeamsPublishing is true.')
 param teamsCustomDomain string = ''
 
@@ -825,6 +828,7 @@ module teamsInfra 'modules-network-secured/teams-publishing-infra.bicep' = if (d
     customDomain: teamsCustomDomain
     botClientId: deployTeamsPublishScript ? teamsPublishScript.outputs.botClientId : botClientIdOverride
     activityProtocolUrl: deployTeamsPublishScript ? teamsPublishScript.outputs.activityProtocolUrl : activityProtocolUrlOverride
+    createSelfSignedCert: createTeamsTlsCert
     apimPrivateIp: '' // Set to APIM private endpoint IP for fully private deployments
   }
   dependsOn: [
