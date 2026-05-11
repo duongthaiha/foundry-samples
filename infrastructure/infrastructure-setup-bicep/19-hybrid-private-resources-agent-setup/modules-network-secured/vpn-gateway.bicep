@@ -60,7 +60,13 @@ resource gatewayPip 'Microsoft.Network/publicIPAddresses@2024-05-01' = {
   location: location
   sku: {
     name: 'Standard'
+    tier: 'Regional'
   }
+  zones: [
+    '1'
+    '2'
+    '3'
+  ]
   properties: {
     publicIPAllocationMethod: 'Static'
   }

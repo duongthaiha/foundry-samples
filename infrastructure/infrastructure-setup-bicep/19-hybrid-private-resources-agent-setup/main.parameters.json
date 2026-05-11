@@ -1,0 +1,78 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentParameters.json#",
+  "contentVersion": "1.0.0.0",
+  "parameters": {
+    "location": {
+      "value": "${AZURE_LOCATION}"
+    },
+    "aiServices": {
+      "value": "${AZURE_AI_SERVICES_NAME=aiservices}"
+    },
+    "firstProjectName": {
+      "value": "${AZURE_FIRST_PROJECT_NAME=project}"
+    },
+    "displayName": {
+      "value": "${AZURE_PROJECT_DISPLAY_NAME=network-secured-agent-project}"
+    },
+    "modelName": {
+      "value": "${AZURE_MODEL_NAME=gpt-4o-mini}"
+    },
+    "modelVersion": {
+      "value": "${AZURE_MODEL_VERSION=2024-07-18}"
+    },
+    "modelSkuName": {
+      "value": "${AZURE_MODEL_SKU=GlobalStandard}"
+    },
+    "modelCapacity": {
+      "value": "${AZURE_MODEL_CAPACITY=30}"
+    },
+    "deployApplicationInsights": {
+      "value": "${DEPLOY_APP_INSIGHTS=true}"
+    },
+    "deployBastion": {
+      "value": "${DEPLOY_BASTION=true}"
+    },
+    "jumpboxAdminPassword": {
+      "value": "${JUMPBOX_ADMIN_PASSWORD}"
+    },
+    "jumpboxVmSize": {
+      "value": "${JUMPBOX_VM_SIZE=Standard_D2s_v3}"
+    },
+    "deploySearchSharedPrivateLink": {
+      "value": "${DEPLOY_SEARCH_SHARED_PRIVATE_LINK=false}"
+    },
+    "existingVnetResourceId": {
+      "value": "${EXISTING_VNET_RESOURCE_ID=}"
+    },
+    "deployApiManagement": {
+      "value": "${DEPLOY_APIM=false}"
+    },
+    "publisherEmail": {
+      "value": "${APIM_PUBLISHER_EMAIL=apim-admin@contoso.com}"
+    },
+    "publisherName": {
+      "value": "${APIM_PUBLISHER_NAME=AI Foundry}"
+    },
+    "deployVpnGateway": {
+      "value": "${DEPLOY_VPN_GATEWAY=false}"
+    },
+    "vpnGatewaySku": {
+      "value": "${VPN_GATEWAY_SKU=VpnGw1AZ}"
+    },
+    "deployCrossRegionOpenAI": {
+      "value": "${DEPLOY_CROSS_REGION_OPENAI=false}"
+    },
+    "crossRegionLocation": {
+      "value": "${CROSS_REGION_LOCATION=}"
+    },
+    "crossRegionModelName": {
+      "value": "${CROSS_REGION_MODEL_NAME=gpt-4o}"
+    },
+    "deployWorkflow": {
+      "value": "${DEPLOY_WORKFLOW=false}"
+    },
+    "deployTeamsPublishing": {
+      "value": "${DEPLOY_TEAMS_PUBLISHING=false}"
+    }
+  }
+}
