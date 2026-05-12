@@ -481,7 +481,10 @@ az containerapp create \
 
 ## Publishing to Microsoft Teams
 
-For publishing agents to Teams while keeping the agent on a private network, see **[PUBLISH.md](PUBLISH.md)** for the complete step-by-step guide.
+For publishing agents to Teams while keeping the agent on a private network, see:
+- **[PUBLISH.md](PUBLISH.md)** — provisioning runbook (Phases 1-3: data plane + cert + `azd provision`).
+- **[docs/teams-app-onboarding.md](docs/teams-app-onboarding.md)** — Teams app onboarding runbook (Phase 4: build the manifest ZIP, sideload or org-publish, M365 admin approval, end-to-end verification).
+- **[docs/teams-app-debugging.md](docs/teams-app-debugging.md)** — when something breaks: diagnostic-logging setup, layer-by-layer fault isolation (Bot Service → App Gateway → APIM → Foundry agent), and KQL queries.
 
 Deploy with Teams publishing:
 ```bash

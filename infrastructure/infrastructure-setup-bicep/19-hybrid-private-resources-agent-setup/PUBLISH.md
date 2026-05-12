@@ -346,6 +346,8 @@ Required only if you selected **People in your organization** in Step 5.
 
 You can return to the same URL any time to check approval status.
 
+> **Want to sideload the Teams manifest yourself** (instead of using the Foundry portal Publish flow)? See [`docs/teams-app-onboarding.md`](docs/teams-app-onboarding.md) for the manifest update + ZIP build + Teams Admin Center upload runbook.
+
 ---
 
 ## Cert rotation
@@ -500,4 +502,4 @@ Sideload it in Microsoft Teams: **Apps** → **Manage your apps** → **Upload a
 - [Microsoft Foundry — Publish agents to M365 and Teams](https://learn.microsoft.com/en-us/azure/foundry/agents/how-to/publish-copilot)
 - [Container-hosted agent track (FoundryA365 sample)](https://github.com/microsoft-foundry/foundry-samples/tree/main/samples/csharp/FoundryA365)
 - [Foundry agents through the corporate firewall (blog)](https://techcommunity.microsoft.com/blog/azure-ai-foundry-blog/foundry-agents-and-custom-engine-agents-through-the-corporate-firewall/4502218)
-- This template's other docs: [README.md](README.md), [PrivateDeploy.md](PrivateDeploy.md), [diagrams/architecture.md](diagrams/architecture.md)
+- This template's other docs: [README.md](README.md), [PrivateDeploy.md](PrivateDeploy.md), [docs/teams-app-onboarding.md](docs/teams-app-onboarding.md), [docs/teams-app-debugging.md](docs/teams-app-debugging.md), [diagrams/architecture.md](diagrams/architecture.md)

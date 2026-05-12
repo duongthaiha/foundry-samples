@@ -127,6 +127,9 @@ param apimModelDeployments array = []
 @description('Set to true to deploy Application Insights for agent tracing and logging.')
 param deployApplicationInsights bool = true
 
+@description('Set to true to wire Azure Diagnostic Settings from App Gateway, APIM, Bot Service, and the Foundry account into the Log Analytics workspace deployed by Application Insights. Requires deployApplicationInsights=true. See docs/teams-app-debugging.md for the KQL queries this enables.')
+param deployDiagnosticSettings bool = true
+
 @description('Set to true to deploy Azure Bastion and a jump box VM for portal access to private resources.')
 param deployBastion bool = false
 
@@ -834,5 +837,29 @@ module teamsInfra 'modules-network-secured/teams-publishing-infra.bicep' = if (d
   dependsOn: [
     apimDependencies
     privateEndpointAndDNS
+  ]
+}
+
+// =============================================================================
+// Diagnostic Settings — wires App Gateway / APIM / Bot Service / Foundry account
+// into the Log Analytics workspace deployed by application-insights.bicep.
+// Populates the AzureDiagnostics, AGWAccessLogs, ApiManagementGatewayLogs tables
+// referenced by docs/teams-app-debugging.md.
+// =============================================================================
+module diagnosticSettings 'modules-network-secured/diagnostic-settings.bicep' = if (deployDiagnosticSettings && deployApplicationInsights) {
+  name: 'diag-${uniqueSuffix}-deployment'
+  params: {
+    logAnalyticsWorkspaceId: applicationInsights.outputs.logAnalyticsWorkspaceId
+    applicationInsightsId: applicationInsights.outputs.appInsightsId
+    applicationInsightsInstrumentationKey: applicationInsights.outputs.appInsightsInstrumentationKey
+    applicationGatewayName: deployTeamsPublishing ? '${aiAccount.outputs.accountName}-appgw' : ''
+    apiManagementName: (deployApiManagement || apiManagementResourceId != '') ? resolvedApiManagementName : ''
+    botServiceName: deployTeamsPublishing ? '${teamsApplicationName}-bot' : ''
+    cognitiveServicesAccountName: aiAccount.outputs.accountName
+    apimApiId: deployTeamsPublishing ? 'bot-messaging' : ''
+  }
+  dependsOn: [
+    teamsInfra
+    apimDependencies
   ]
 }

@@ -29,6 +29,9 @@
     "deployApplicationInsights": {
       "value": "${DEPLOY_APP_INSIGHTS=true}"
     },
+    "deployDiagnosticSettings": {
+      "value": "${DEPLOY_DIAGNOSTIC_SETTINGS=true}"
+    },
     "deployBastion": {
       "value": "${DEPLOY_BASTION=true}"
     },

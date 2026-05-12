@@ -67,5 +67,7 @@ resource appInsightsConnection 'Microsoft.CognitiveServices/accounts/connections
 }
 
 output appInsightsName string = appInsights.name
+output appInsightsId string = appInsights.id
+output appInsightsInstrumentationKey string = appInsights.properties.InstrumentationKey
 output appInsightsConnectionString string = appInsights.properties.ConnectionString
 output logAnalyticsWorkspaceId string = logAnalyticsWorkspace.id
