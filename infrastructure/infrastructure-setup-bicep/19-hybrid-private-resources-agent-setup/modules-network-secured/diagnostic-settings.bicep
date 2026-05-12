@@ -44,6 +44,7 @@ resource appGwDiag 'Microsoft.Insights/diagnosticSettings@2021-05-01-preview' = 
   name: 'to-law'
   properties: {
     workspaceId: logAnalyticsWorkspaceId
+    logAnalyticsDestinationType: 'Dedicated'
     logs: [
       {
         categoryGroup: 'allLogs'
@@ -69,6 +70,7 @@ resource apimDiag 'Microsoft.Insights/diagnosticSettings@2021-05-01-preview' = i
   name: 'to-law'
   properties: {
     workspaceId: logAnalyticsWorkspaceId
+    logAnalyticsDestinationType: 'Dedicated'
     logs: [
       {
         categoryGroup: 'allLogs'
@@ -95,6 +97,7 @@ resource botDiag 'Microsoft.Insights/diagnosticSettings@2021-05-01-preview' = if
   name: 'to-law'
   properties: {
     workspaceId: logAnalyticsWorkspaceId
+    logAnalyticsDestinationType: 'Dedicated'
     logs: [
       {
         category: 'BotRequest'
@@ -120,6 +123,7 @@ resource csDiag 'Microsoft.Insights/diagnosticSettings@2021-05-01-preview' = if 
   name: 'to-law'
   properties: {
     workspaceId: logAnalyticsWorkspaceId
+    logAnalyticsDestinationType: 'Dedicated'
     logs: [
       {
         categoryGroup: 'allLogs'

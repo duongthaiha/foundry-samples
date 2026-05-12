@@ -5,7 +5,7 @@
     "_generator": {
       "name": "bicep",
       "version": "0.42.1.51946",
-      "templateHash": "15521318255313798470"
+      "templateHash": "1867572391918297084"
     }
   },
   "parameters": {
@@ -6292,7 +6292,7 @@
             "_generator": {
               "name": "bicep",
               "version": "0.42.1.51946",
-              "templateHash": "1643909925304081739"
+              "templateHash": "15863354809685502829"
             }
           },
           "parameters": {
@@ -6361,6 +6361,7 @@
               "name": "to-law",
               "properties": {
                 "workspaceId": "[parameters('logAnalyticsWorkspaceId')]",
+                "logAnalyticsDestinationType": "Dedicated",
                 "logs": [
                   {
                     "categoryGroup": "allLogs",
@@ -6383,6 +6384,7 @@
               "name": "to-law",
               "properties": {
                 "workspaceId": "[parameters('logAnalyticsWorkspaceId')]",
+                "logAnalyticsDestinationType": "Dedicated",
                 "logs": [
                   {
                     "categoryGroup": "allLogs",
@@ -6405,6 +6407,7 @@
               "name": "to-law",
               "properties": {
                 "workspaceId": "[parameters('logAnalyticsWorkspaceId')]",
+                "logAnalyticsDestinationType": "Dedicated",
                 "logs": [
                   {
                     "category": "BotRequest",
@@ -6427,6 +6430,7 @@
               "name": "to-law",
               "properties": {
                 "workspaceId": "[parameters('logAnalyticsWorkspaceId')]",
+                "logAnalyticsDestinationType": "Dedicated",
                 "logs": [
                   {
                     "categoryGroup": "allLogs",
