@@ -61,7 +61,7 @@ Tests live in `tests/`. GitHub Actions workflow at repo root: `.github/workflows
 
 When you add a feature flag, new module, or change deploy semantics, update:
 - `README.md` (Modules table, Deployment examples, Key Features table)
-- `PUBLISH.md` / `PrivateDeploy.md` if the change affects the publish/private-deploy flow
+- `PUBLISH.md` / `PrivateDeploy.md` if the change affects the publish/private-deploy and team application flow
 - `diagrams/architecture.md` and `diagrams/sequence-diagram.md` if topology changes
 - `metadata.json` for template metadata
 - The repo-root workflow `.github/workflows/deploy-template-19.yml` if you add a toggle a user should be able to set from `workflow_dispatch`

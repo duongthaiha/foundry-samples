@@ -90,8 +90,7 @@ certbot certonly `
     -d $Domain `
     --config-dir "$certDir/config" `
     --work-dir "$certDir/work" `
-    --logs-dir "$certDir/logs" `
-    --manual-public-ip-logging-ok
+    --logs-dir "$certDir/logs"
 
 if ($LASTEXITCODE -ne 0) {
     Write-Error "certbot failed. Check the output above for details."

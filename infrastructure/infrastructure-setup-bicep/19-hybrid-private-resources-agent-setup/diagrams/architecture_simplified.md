@@ -41,7 +41,7 @@ flowchart LR
 
         subgraph ModelLayer [" 🎯 Model Deployments "]
             direction LR
-            Models["gpt-4o-mini  •  gpt-5.4-nano"]
+            Models["gpt-4o-mini  •  gpt-5.4-nano<br/><i>(both GlobalStandard SKU)</i>"]
         end
     end
 

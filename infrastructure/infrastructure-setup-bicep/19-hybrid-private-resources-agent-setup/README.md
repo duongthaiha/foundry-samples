@@ -294,6 +294,63 @@ When `deployCrossRegionOpenAI=true`, the template creates:
 
 This enables agents in the primary region to use models deployed in other regions, routed securely via the APIM gateway and Azure backbone private links.
 
+## Model Availability and Deployment SKUs
+
+Before changing the `modelName` / `modelSkuName` parameters, verify the model + SKU combo is available in your target region. The official source of truth is [Foundry Models sold directly by Azure](https://learn.microsoft.com/en-us/azure/foundry/foundry-models/concepts/models-sold-directly-by-azure?tabs=europe%2Caz-global-standard%2Cglobal-standard&pivots=azure-openai#model-summary-table-and-region-availability) — and you can always confirm live availability with the Azure CLI (see [Check live availability](#check-live-availability) below).
+
+### Deployment SKU types (Azure OpenAI / Foundry direct models)
+
+These are all "pay-as-you-go" billing models, but they differ in **where your data and inference traffic land**:
+
+| SKU | Pricing | Data residency | Use when |
+|---|---|---|---|
+| `Standard` | Lowest per-token | Within the region you deploy to | You need regional data residency (uncommon for newer models) |
+| `GlobalStandard` | ~50% cheaper than Standard | Routed globally to any Microsoft region with capacity | You're OK with global routing (most common) |
+| `DataZoneStandard` | Between Standard and Global | Within a defined data zone (e.g. EU or US) | Compliance requires zone-level residency |
+| `ProvisionedManaged` | Reserved capacity / per-PTU/hr | Within the region | Predictable high-volume workloads |
+| `GlobalProvisionedManaged` | Reserved capacity, global | Routed globally | Predictable workloads with relaxed residency |
+| `GlobalBatch` | Batch API, async | Routed globally | Bulk async jobs (24h SLA) |
+
+The template defaults to `modelSkuName='GlobalStandard'` (in `main.bicep`) because it has the broadest model coverage and lowest cost. If you need regional data residency, change `modelSkuName` to `Standard` (or `DataZoneStandard`) **only if your model + region supports it** — many newer models like the GPT-5.4 series are **only available on GlobalStandard / GlobalProvisionedManaged**.
+
+### Worked example: UK South
+
+This template's deployment is in UK South would look like this for two common models:
+
+| Model | `Standard` (regional PAYG) | `GlobalStandard` | `DataZoneStandard` | `ProvisionedManaged` |
+|---|---|---|---|---|
+| `gpt-4o-mini` | ✅ | ✅ | ✅ | ✅ |
+| `gpt-5.4-nano` | ❌ not available | ✅ | ❌ not in UK South | ❌ |
+| `gpt-5.4-mini` | ❌ not available | ✅ | ❌ not in UK South | ❌ |
+| `gpt-5.4` | ❌ not available | ✅ | ❌ not in UK South | ✅ (`GlobalProvisionedManaged`) |
+
+> The whole **GPT-5.4 series** is currently only sold on Global SKUs — Microsoft has not released a regional `Standard` tier for it in any region. If you need regional PAYG in UK South, use `gpt-4o-mini` or `gpt-4.1` family instead.
+
+The cross-region OpenAI module is one way to combine constraints: deploy `gpt-4o-mini` regionally in UK South for residency-sensitive work, and deploy `gpt-5.4-nano` GlobalStandard in another region via `deployCrossRegionOpenAI=true` for everything else.
+
+### Check live availability
+
+Don't rely on the doc alone — the model catalog moves frequently. Verify with:
+
+```bash
+# List every model + SKU available in your region
+az cognitiveservices model list --location uksouth -o table
+
+# Just one model family
+az cognitiveservices model list --location uksouth \
+  --query "[?contains(model.name, 'gpt-5.4')].{name:model.name, version:model.version, skus:join(',', model.skus[].name)}" \
+  -o table
+
+# Check the same model across regions
+for r in uksouth eastus2 swedencentral westus3; do
+  echo "=== $r ==="
+  az cognitiveservices model list --location $r \
+    --query "[?model.name=='gpt-5.4-nano'].join(',', model.skus[].name)" -o tsv
+done
+```
+
+If `az cognitiveservices model list` returns no rows for the SKU you want, the deployment will fail at ARM-validation time with `InvalidResourceProperties: Model deployment is not supported`.
+
 ## Observability
 
 Application Insights is deployed by default (`deployApplicationInsights=true`), providing:

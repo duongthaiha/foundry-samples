@@ -70,8 +70,8 @@ graph TB
     %% ============================================================
     subgraph AIServices["🧠 AI Foundry Account (primary region)\npublicNetworkAccess: Disabled"]
         Project["📂 Project"]
-        Model1["🤖 gpt-4o-mini"]
-        Model2["🤖 gpt-5.4-nano"]
+        Model1["🤖 gpt-4o-mini<br/><i>GlobalStandard</i>"]
+        Model2["🤖 gpt-5.4-nano<br/><i>GlobalStandard only</i>"]
 
         subgraph Connections["🔌 Connections"]
             Conn_APIM["apim-gateway\n(ApiManagement)"]
