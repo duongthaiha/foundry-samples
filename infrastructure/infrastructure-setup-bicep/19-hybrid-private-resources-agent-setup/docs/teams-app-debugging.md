@@ -27,7 +27,7 @@ What it wires up:
 |---|---|---|
 | Application Gateway | All logs (Access / Performance / Firewall) + AllMetrics | `AGWAccessLogs`, `AGWFirewallLogs`, `AGWPerformanceLogs` |
 | API Management | All logs (GatewayLogs / WebSocketConnectionLogs) + AllMetrics | `ApiManagementGatewayLogs`, `ApiManagementWebSocketConnectionLogs` |
-| Bot Service | `BotRequest` + AllMetrics | `AzureDiagnostics` (filter `ResourceType=="BOTSERVICES"`) |
+| Bot Service | `BotRequest` + AllMetrics | `ABSBotRequest` (dedicated mode), with legacy `AzureDiagnostics` (`ResourceType=="BOTSERVICES"`) as fallback |
 | Foundry (Cognitive Services) account | All logs (Audit / RequestResponse / Trace) + AllMetrics | `AzureDiagnostics` (filter `ResourceProvider=="MICROSOFT.COGNITIVESERVICES"`) |
 | APIM logger + `bot-messaging` API tracing | App Insights logger + per-API diagnostics (sampling 100%, allErrors, W3C correlation) | `AppRequests`, `AppDependencies`, `AppTraces` |
 
@@ -123,6 +123,18 @@ az rest --method get \
 ### Bot Service request logs (after Step 0)
 
 ```kql
+// Preferred: dedicated table (created on first Bot Channel traffic)
+ABSBotRequest
+| where TimeGenerated > ago(1h)
+| project TimeGenerated, OperationName, ResultType, ResultDescription,
+          DurationMs, ChannelId, ActivityType, StatusCode,
+          AuthorizationStatus, CorrelationId
+| order by TimeGenerated desc
+```
+
+If `ABSBotRequest` returns no rows, fall back to legacy:
+
+```kql
 AzureDiagnostics
 | where ResourceType == "BOTSERVICES" and Category == "BotRequest"
 | where TimeGenerated > ago(1h)
@@ -130,7 +142,7 @@ AzureDiagnostics
 | order by TimeGenerated desc
 ```
 
-If you see `ResultType != Success` here, that's the Channel Adapter's view — its rejection means it never even tried your endpoint. If `ResultType == Success` here but the user sees nothing, the failure is downstream (App Gateway or APIM).
+If you see `ResultType != Success` here, that's the Channel Adapter's view — its rejection means it never even tried your endpoint. If `ResultType == Success` here but the user sees nothing, the failure is downstream (App Gateway or APIM). See [`docs/teams-app-kql-queries.md` §3](teams-app-kql-queries.md#3-azure-bot-service) for a full table of failure combinations.
 
 ### Self-test the bot endpoint
 

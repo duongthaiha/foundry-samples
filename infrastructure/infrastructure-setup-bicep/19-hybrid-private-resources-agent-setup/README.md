@@ -484,7 +484,8 @@ az containerapp create \
 For publishing agents to Teams while keeping the agent on a private network, see:
 - **[PUBLISH.md](PUBLISH.md)** — provisioning runbook (Phases 1-3: data plane + cert + `azd provision`).
 - **[docs/teams-app-onboarding.md](docs/teams-app-onboarding.md)** — Teams app onboarding runbook (Phase 4: build the manifest ZIP, sideload or org-publish, M365 admin approval, end-to-end verification).
-- **[docs/teams-app-debugging.md](docs/teams-app-debugging.md)** — when something breaks: diagnostic-logging setup, layer-by-layer fault isolation (Bot Service → App Gateway → APIM → Foundry agent), and KQL queries.
+- **[docs/teams-app-debugging.md](docs/teams-app-debugging.md)** — when something breaks: layer-by-layer fault isolation (Bot Service → App Gateway → APIM → Foundry agent).
+- **[docs/teams-app-kql-queries.md](docs/teams-app-kql-queries.md)** — copy-paste KQL queries for the Log Analytics workspace (latency dashboards, error breakdowns, end-to-end correlation across all four layers).
 
 Deploy with Teams publishing:
 ```bash
