@@ -5,7 +5,7 @@
     "_generator": {
       "name": "bicep",
       "version": "0.43.8.12551",
-      "templateHash": "15795039074183601301"
+      "templateHash": "4350202542163699196"
     }
   },
   "parameters": {
@@ -256,6 +256,13 @@
       "defaultValue": true,
       "metadata": {
         "description": "Set to true to deploy Application Insights for agent tracing and logging."
+      }
+    },
+    "deployDiagnosticSettings": {
+      "type": "bool",
+      "defaultValue": true,
+      "metadata": {
+        "description": "Set to true to wire Azure Diagnostic Settings from App Gateway, APIM, Bot Service, and the Foundry account into the Log Analytics workspace deployed by Application Insights. Requires deployApplicationInsights=true. See docs/teams-app-debugging.md for the KQL queries this enables."
       }
     },
     "deployBastion": {
@@ -1652,7 +1659,7 @@
             "_generator": {
               "name": "bicep",
               "version": "0.43.8.12551",
-              "templateHash": "8440946092105419840"
+              "templateHash": "13564497054810198299"
             }
           },
           "parameters": {
@@ -1735,6 +1742,14 @@
             "appInsightsName": {
               "type": "string",
               "value": "[parameters('appInsightsName')]"
+            },
+            "appInsightsId": {
+              "type": "string",
+              "value": "[resourceId('Microsoft.Insights/components', parameters('appInsightsName'))]"
+            },
+            "appInsightsInstrumentationKey": {
+              "type": "string",
+              "value": "[reference(resourceId('Microsoft.Insights/components', parameters('appInsightsName')), '2020-02-02').InstrumentationKey]"
             },
             "appInsightsConnectionString": {
               "type": "string",
@@ -6240,6 +6255,235 @@
         "[resourceId('Microsoft.Resources/deployments', format('teams-publish-{0}-deployment', variables('uniqueSuffix')))]",
         "[resourceId('Microsoft.Resources/deployments', format('validate-existing-resources-{0}-deployment', variables('uniqueSuffix')))]",
         "[resourceId('Microsoft.Resources/deployments', format('vnet-{0}-{1}-deployment', variables('trimVnetName'), variables('uniqueSuffix')))]"
+      ]
+    },
+    {
+      "condition": "[and(parameters('deployDiagnosticSettings'), parameters('deployApplicationInsights'))]",
+      "type": "Microsoft.Resources/deployments",
+      "apiVersion": "2025-04-01",
+      "name": "[format('diag-{0}-deployment', variables('uniqueSuffix'))]",
+      "properties": {
+        "expressionEvaluationOptions": {
+          "scope": "inner"
+        },
+        "mode": "Incremental",
+        "parameters": {
+          "logAnalyticsWorkspaceId": {
+            "value": "[reference(resourceId('Microsoft.Resources/deployments', format('appinsights-{0}-deployment', variables('uniqueSuffix'))), '2025-04-01').outputs.logAnalyticsWorkspaceId.value]"
+          },
+          "applicationInsightsId": {
+            "value": "[reference(resourceId('Microsoft.Resources/deployments', format('appinsights-{0}-deployment', variables('uniqueSuffix'))), '2025-04-01').outputs.appInsightsId.value]"
+          },
+          "applicationInsightsInstrumentationKey": {
+            "value": "[reference(resourceId('Microsoft.Resources/deployments', format('appinsights-{0}-deployment', variables('uniqueSuffix'))), '2025-04-01').outputs.appInsightsInstrumentationKey.value]"
+          },
+          "applicationGatewayName": "[if(parameters('deployTeamsPublishing'), createObject('value', format('{0}-appgw', reference(resourceId('Microsoft.Resources/deployments', format('{0}-{1}-deployment', variables('accountName'), variables('uniqueSuffix'))), '2025-04-01').outputs.accountName.value)), createObject('value', ''))]",
+          "apiManagementName": "[if(or(parameters('deployApiManagement'), not(equals(parameters('apiManagementResourceId'), ''))), if(parameters('deployApiManagement'), createObject('value', reference(resourceId('Microsoft.Resources/deployments', format('apim-{0}-deployment', variables('uniqueSuffix'))), '2025-04-01').outputs.apiManagementName.value), createObject('value', reference(resourceId('Microsoft.Resources/deployments', format('validate-existing-resources-{0}-deployment', variables('uniqueSuffix'))), '2025-04-01').outputs.apiManagementName.value)), createObject('value', ''))]",
+          "botServiceName": "[if(parameters('deployTeamsPublishing'), createObject('value', format('{0}-bot', parameters('teamsApplicationName'))), createObject('value', ''))]",
+          "cognitiveServicesAccountName": {
+            "value": "[reference(resourceId('Microsoft.Resources/deployments', format('{0}-{1}-deployment', variables('accountName'), variables('uniqueSuffix'))), '2025-04-01').outputs.accountName.value]"
+          },
+          "apimApiId": "[if(parameters('deployTeamsPublishing'), createObject('value', 'bot-messaging'), createObject('value', ''))]"
+        },
+        "template": {
+          "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+          "contentVersion": "1.0.0.0",
+          "metadata": {
+            "_generator": {
+              "name": "bicep",
+              "version": "0.43.8.12551",
+              "templateHash": "12097258968266579547"
+            }
+          },
+          "parameters": {
+            "logAnalyticsWorkspaceId": {
+              "type": "string",
+              "metadata": {
+                "description": "Log Analytics Workspace resource ID (output from application-insights.bicep)."
+              }
+            },
+            "applicationGatewayName": {
+              "type": "string",
+              "defaultValue": "",
+              "metadata": {
+                "description": "Name of the Application Gateway to wire diagnostics on. Empty = skip."
+              }
+            },
+            "apiManagementName": {
+              "type": "string",
+              "defaultValue": "",
+              "metadata": {
+                "description": "Name of the API Management service to wire diagnostics on. Empty = skip."
+              }
+            },
+            "botServiceName": {
+              "type": "string",
+              "defaultValue": "",
+              "metadata": {
+                "description": "Name of the Bot Service to wire diagnostics on. Empty = skip."
+              }
+            },
+            "cognitiveServicesAccountName": {
+              "type": "string",
+              "defaultValue": "",
+              "metadata": {
+                "description": "Name of the AI Foundry / Cognitive Services account to wire diagnostics on. Empty = skip."
+              }
+            },
+            "applicationInsightsId": {
+              "type": "string",
+              "defaultValue": "",
+              "metadata": {
+                "description": "Application Insights resource ID. When provided alongside apiManagementName, an APIM logger pointing at this App Insights is created so the bot-messaging API can be traced per-request."
+              }
+            },
+            "applicationInsightsInstrumentationKey": {
+              "type": "securestring",
+              "defaultValue": "",
+              "metadata": {
+                "description": "Application Insights instrumentation key. Required by APIM logger API when applicationInsightsId is set."
+              }
+            },
+            "apimApiId": {
+              "type": "string",
+              "defaultValue": "",
+              "metadata": {
+                "description": "Name of the APIM API to attach App Insights tracing to (e.g., bot-messaging). Empty = skip."
+              }
+            }
+          },
+          "resources": [
+            {
+              "condition": "[not(empty(parameters('applicationGatewayName')))]",
+              "type": "Microsoft.Insights/diagnosticSettings",
+              "apiVersion": "2021-05-01-preview",
+              "scope": "[resourceId('Microsoft.Network/applicationGateways', parameters('applicationGatewayName'))]",
+              "name": "to-law",
+              "properties": {
+                "workspaceId": "[parameters('logAnalyticsWorkspaceId')]",
+                "logs": [
+                  {
+                    "categoryGroup": "allLogs",
+                    "enabled": true
+                  }
+                ],
+                "metrics": [
+                  {
+                    "category": "AllMetrics",
+                    "enabled": true
+                  }
+                ]
+              }
+            },
+            {
+              "condition": "[not(empty(parameters('apiManagementName')))]",
+              "type": "Microsoft.Insights/diagnosticSettings",
+              "apiVersion": "2021-05-01-preview",
+              "scope": "[resourceId('Microsoft.ApiManagement/service', parameters('apiManagementName'))]",
+              "name": "to-law",
+              "properties": {
+                "workspaceId": "[parameters('logAnalyticsWorkspaceId')]",
+                "logs": [
+                  {
+                    "categoryGroup": "allLogs",
+                    "enabled": true
+                  }
+                ],
+                "metrics": [
+                  {
+                    "category": "AllMetrics",
+                    "enabled": true
+                  }
+                ]
+              }
+            },
+            {
+              "condition": "[not(empty(parameters('botServiceName')))]",
+              "type": "Microsoft.Insights/diagnosticSettings",
+              "apiVersion": "2021-05-01-preview",
+              "scope": "[resourceId('Microsoft.BotService/botServices', parameters('botServiceName'))]",
+              "name": "to-law",
+              "properties": {
+                "workspaceId": "[parameters('logAnalyticsWorkspaceId')]",
+                "logs": [
+                  {
+                    "category": "BotRequest",
+                    "enabled": true
+                  }
+                ],
+                "metrics": [
+                  {
+                    "category": "AllMetrics",
+                    "enabled": true
+                  }
+                ]
+              }
+            },
+            {
+              "condition": "[not(empty(parameters('cognitiveServicesAccountName')))]",
+              "type": "Microsoft.Insights/diagnosticSettings",
+              "apiVersion": "2021-05-01-preview",
+              "scope": "[resourceId('Microsoft.CognitiveServices/accounts', parameters('cognitiveServicesAccountName'))]",
+              "name": "to-law",
+              "properties": {
+                "workspaceId": "[parameters('logAnalyticsWorkspaceId')]",
+                "logs": [
+                  {
+                    "categoryGroup": "allLogs",
+                    "enabled": true
+                  }
+                ],
+                "metrics": [
+                  {
+                    "category": "AllMetrics",
+                    "enabled": true
+                  }
+                ]
+              }
+            },
+            {
+              "condition": "[and(and(not(empty(parameters('apiManagementName'))), not(empty(parameters('applicationInsightsId')))), not(empty(parameters('applicationInsightsInstrumentationKey'))))]",
+              "type": "Microsoft.ApiManagement/service/loggers",
+              "apiVersion": "2024-05-01",
+              "name": "[format('{0}/{1}', parameters('apiManagementName'), 'applicationinsights')]",
+              "properties": {
+                "loggerType": "applicationInsights",
+                "description": "Application Insights logger for bot-messaging API tracing",
+                "resourceId": "[parameters('applicationInsightsId')]",
+                "credentials": {
+                  "instrumentationKey": "[parameters('applicationInsightsInstrumentationKey')]"
+                }
+              }
+            },
+            {
+              "condition": "[and(and(not(empty(parameters('apiManagementName'))), not(empty(parameters('applicationInsightsId')))), not(empty(parameters('apimApiId'))))]",
+              "type": "Microsoft.ApiManagement/service/apis/diagnostics",
+              "apiVersion": "2024-05-01",
+              "name": "[format('{0}/{1}/{2}', parameters('apiManagementName'), parameters('apimApiId'), 'applicationinsights')]",
+              "properties": {
+                "alwaysLog": "allErrors",
+                "loggerId": "[resourceId('Microsoft.ApiManagement/service/loggers', parameters('apiManagementName'), 'applicationinsights')]",
+                "sampling": {
+                  "samplingType": "fixed",
+                  "percentage": 100
+                },
+                "logClientIp": true,
+                "httpCorrelationProtocol": "W3C",
+                "verbosity": "information"
+              },
+              "dependsOn": [
+                "[resourceId('Microsoft.ApiManagement/service/loggers', parameters('apiManagementName'), 'applicationinsights')]"
+              ]
+            }
+          ]
+        }
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.Resources/deployments', format('{0}-{1}-deployment', variables('accountName'), variables('uniqueSuffix')))]",
+        "[resourceId('Microsoft.Resources/deployments', format('apim-{0}-deployment', variables('uniqueSuffix')))]",
+        "[resourceId('Microsoft.Resources/deployments', format('appinsights-{0}-deployment', variables('uniqueSuffix')))]",
+        "[resourceId('Microsoft.Resources/deployments', format('teams-infra-{0}-deployment', variables('uniqueSuffix')))]",
+        "[resourceId('Microsoft.Resources/deployments', format('validate-existing-resources-{0}-deployment', variables('uniqueSuffix')))]"
       ]
     }
   ]
